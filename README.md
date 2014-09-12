@@ -72,6 +72,9 @@ appears below the menu ribbon. Tap it and follow setup instructions.
 
 **Version 1.1.0. Released 2014-09-12**
 * Released under GPLv3 License.
+* Added 'About' page in the setup menu.
+* Merged changes from Barry Burke (SANdood) branch
+(https://github.com/SANdood/smartthings/tree/master/SmartAlarm). Thanks!
 
 **Version 1.0.1. Released 2014-08-28**
 * Fixed spelling mistakes, formatting, etc.

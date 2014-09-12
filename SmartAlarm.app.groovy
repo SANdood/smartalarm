@@ -30,11 +30,11 @@
  *  The latest version of this file can be found at:
  *  https://github.com/statusbits/smartalarm/blob/master/SmartAlarm.app.groovy
  *
- *  Revision History
- *  ----------------
- *  2014-09-12  V1.1.0  Released under GPLv3 License.
- *  2014-08-28  V1.0.1  Spelling mistakes, formatting, etc.
- *  2014-07-04  V1.0.0  Initial release
+ *  Revision History (see https://github.com/statusbits/smartalarm/ for details)
+ *
+ *  2014-09-12  V1.1.0
+ *  2014-08-28  V1.0.1
+ *  2014-07-04  V1.0.0
  */
 
 definition(
@@ -43,8 +43,8 @@ definition(
     author: "geko@statusbits.com",
     description: "Turn SmartThings into a smart, multi-zone home security system.",
     category: "Safety & Security",
-    iconUrl: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience.png",
-    iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience%402x.png"
+    iconUrl: "https://s3.amazonaws.com/smartapp-icons/Cat-SafetyAndSecurity/App-IsItSafe.png",
+    iconX2Url: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe@2x.png"
 )
 
 preferences {
@@ -354,6 +354,10 @@ def setupControlPanel() {
             href "setupZoneBypass", title:"Quick Zone Bypass", description:"Tap to open"
             href "setupConfigure", title:"Configure Smart Alarm", description:"Tap to open"
         }
+        section([title:"Options", mobileOnly:true]) {
+            label title:"Assign a name", required:false
+            mode title:"Enable only for specific mode(s)", required:false
+        }
     }
 }
 
@@ -456,6 +460,7 @@ private initialize()
     state.numZones = settings.numZones.toInteger()
     state.exitDelay = settings.exitDelay ? 45 : 0
     state.entryDelay = settings.entryDelay ? 45 : 0
+    state.offSwitches = []
     state.zones = []
     for (int n = 0; n < state.numZones; n++) {
         state.zones[n] = zoneInit(n)
@@ -485,7 +490,13 @@ def panelReset()
 
     unschedule()
     alarms*.off()
-    switches*.off()
+
+    // only turn back off those switches that we turned on
+    if (state.offSwitches) {
+        state.offSwitches*.off()
+        state.offSwitches = []
+    }
+
     state.alarm = false
     for (int n = 0; n < state.numZones; n++) {
         zoneReset(n)
@@ -500,7 +511,13 @@ private def panelDisarm()
 
     unschedule()
     alarms*.off()
-    switches*.off()
+
+    // only turn back off those switches that we turned on
+    if (state.offSwitches) {
+        state.offSwitches*.off()
+        state.offSwitches = []
+    }
+
     state.armed = false
     state.alarm = false
     for (int n = 0; n < state.numZones; n++) {
@@ -514,7 +531,7 @@ private def panelStatus()
 {
     TRACE("panelStatus()")
 
-    def msg = "${location.name} alarm "
+    def msg = "${app.label} "
     if (state.armed) {
         def mode = state.stay ? "Stay" : "Away"
         msg += "armed '${mode}'."
@@ -534,7 +551,9 @@ private def panelStatus()
 
     }
 
-    notify(msg)
+    // use sendNotificationEvent instead of Push/SMS on panel status change
+    //notify(msg)
+    sendNotificationEvent(msg)
 }
 
 private def panelPanic()
@@ -678,6 +697,8 @@ private def onAlarm(n, evt)
         if (zone.alert || !state.entryDelay) {
             activateAlarm()
         } else {
+            // See Issue #1.
+            unschedule()
             runIn(state.entryDelay, activateAlarm)
         }
     }
@@ -731,6 +752,8 @@ def onLocation(evt)
     state.stay = newStay
     if (newArmed) {
         if (state.exitDelay) {
+            // See Issue #1.
+            unschedule()
             runIn(state.exitDelay, panelReset)
         } else {
             panelReset()
@@ -753,7 +776,12 @@ def activateAlarm()
     // Activate alarms and switches
     if (!settings.silent) {
         alarms*.both()
-        switches*.on()
+
+        // Only turn on those switches that are currently off
+        state.offSwitches = switches.findAll { it?.currentSwitch == "off" }
+        if (state.offSwitches) {
+            state.offSwitches*.on()
+        }
     }
 
     // Send notifications
@@ -766,6 +794,8 @@ def activateAlarm()
     notify(msg)
 
     // Reset panel in 3 minutes
+    // See Issue #1.
+    unschedule()
     runIn(180, panelReset)
 }
 
