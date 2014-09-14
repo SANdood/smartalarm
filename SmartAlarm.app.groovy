@@ -33,6 +33,8 @@
  *  Version 1.1.2 (2014-09-14)
  */
 
+import groovy.json.JsonSlurper
+
 definition(
     name: "Smart Alarm",
     namespace: "statusbits",
@@ -81,11 +83,11 @@ def pageSetupMenu() {
         section {
             buttons name:"buttonReset", required:false,
                 buttons:[
-                    [label:"Reset", action:"panelReset"]
+                    [label:"Reset", action:"resetPanel"]
                 ]
             buttons name:"buttonPanic", required:false,
                 buttons:[
-                    [label:"Panic", action:"panelPanic", backgroundColor:"red"]
+                    [label:"Panic", action:"panic", backgroundColor:"red"]
                 ]
         }
         section {
@@ -522,19 +524,34 @@ private initialize() {
         state.armed = false
         state.stay = false
     }
+    resetPanel()
 
-    panelReset()
-
-    subscribe(location, onLocation)
+    // setup button actions
+    state.buttonActions = [:]
     if (settings.buttons) {
+        if (settings.buttonArmAway) {
+            state.buttonActions[settings.buttonArmAway] = "armAway"
+        }
+        if (settings.buttonArmStay) {
+            state.buttonActions[settings.buttonArmStay] = "armStay"
+        }
+        if (settings.buttonDisarm) {
+            state.buttonActions[settings.buttonDisarm] = "disarm"
+        }
+        if (settings.buttonPanic) {
+            state.buttonActions[settings.buttonPanic] = "panic"
+        }
+
         subscribe(settings.buttons, "button.pushed", onButtonPushed)
     }
+
+    subscribe(location, onLocation)
 
     STATE()
 }
 
-def panelReset() {
-    TRACE("panelReset()")
+def resetPanel() {
+    TRACE("resetPanel()")
 
     unschedule()
     alarms*.off()
@@ -545,27 +562,6 @@ def panelReset() {
         state.offSwitches = []
     }
 
-    state.alarm = false
-    for (int n = 0; n < state.numZones; n++) {
-        zoneReset(n)
-    }
-
-    panelStatus()
-}
-
-private def panelDisarm() {
-    TRACE("panelDisarm()")
-
-    unschedule()
-    alarms*.off()
-
-    // only turn back off those switches that we turned on
-    if (state.offSwitches) {
-        state.offSwitches*.off()
-        state.offSwitches = []
-    }
-
-    state.armed = false
     state.alarm = false
     for (int n = 0; n < state.numZones; n++) {
         zoneReset(n)
@@ -600,13 +596,6 @@ private def panelStatus() {
     // use sendNotificationEvent instead of Push/SMS on panel status change
     //notify(msg)
     sendNotificationEvent(msg)
-}
-
-private def panelPanic() {
-    TRACE("panelPanic()")
-
-    state.alarm = true;
-    activateAlarm()
 }
 
 private def zoneInit(n) {
@@ -762,51 +751,93 @@ def onZone15(evt) { onAlarm(14, evt) }
 def onZone16(evt) { onAlarm(15, evt) }
 
 def onLocation(evt) {
-    TRACE("onLocation(${evt})")
+    TRACE("onLocation(${evt.displayName})")
 
     def mode = evt.value
-    def newArmed
-    def newStay
+    def armed = false
+    def stay = atomicState.stay
     if (settings.awayModes?.contains(mode)) {
-        newArmed = true
-        newStay = false
+        armed = true
+        stay = false
     } else if (settings.stayModes?.contains(mode)) {
-        newArmed = true
-        newStay = true
-    } else {
-        newArmed = false
-        newStay = false
+        armed = true
+        stay = true
     }
 
-    if (state.armed == newArmed && state.stay == newStay) {
+    if (armed == atomicState.armed && state == atomicState.stay) {
         return
     }
 
-    if (state.armed) {
-        panelDisarm()
-    }
-
-    state.armed = newArmed
-    state.stay = newStay
-    if (newArmed) {
+    if (armed) {
         if (state.exitDelay) {
             // See Issue #1.
             unschedule()
-            runIn(state.exitDelay, panelReset)
+            if (stay) {
+                runIn(state.exitDelay, armStay)
+            } else {
+                runIn(state.exitDelay, armAway)
+            }
         } else {
-            panelReset()
+            state.armed = true
+            state.stay = stay
+            resetPanel()
         }
+    } else {
+        disarm()
     }
 }
 
 def onButtonPushed(evt) {
-    TRACE("onButtonPushed(${evt})")
-    log.trace("onButtonPushed not implemented!")
+    TRACE("onButtonPushed(${evt.displayName})")
+
+    if (!evt.data) {
+        return
+    }
+
+    def slurper = new JsonSlurper()
+    def data = slurper.parseText(evt.data)
+    def button = data.buttonNumber
+    if (button) {
+        TRACE("Button '${button}' was pushed.")
+        def action = state.buttonActions["${button}"]
+        log.trace "Executing button action ${action}()"
+        "${action}"()
+    }
 }
 
 def onImageCapture(evt) {
-    TRACE("onImageCapture(${evt})")
+    TRACE("onImageCapture(${evt.displayName})")
     log.trace("onImageCapture not implemented!")
+}
+
+def armAway() {
+    TRACE("armAway()")
+
+    state.armed = true
+    state.stay = false
+    resetPanel()
+}
+
+def armStay() {
+    TRACE("armStay()")
+
+    state.armed = true
+    state.stay = true
+    resetPanel()
+}
+
+def disarm() {
+    TRACE("disarm()")
+
+    state.armed = false
+    resetPanel()
+}
+
+def panic() {
+    TRACE("panic()")
+
+    state.alarm = true;
+    activateAlarm()
 }
 
 def activateAlarm() {
@@ -838,7 +869,7 @@ def activateAlarm() {
     // Reset panel in 3 minutes
     // See Issue #1.
     unschedule()
-    runIn(180, panelReset)
+    runIn(180, resetPanel)
 }
 
 private def notify(msg) {
@@ -882,7 +913,7 @@ private def textLicense() {
 }
 
 private def TRACE(message) {
-    log.debug message
+    //log.debug message
 }
 
 private def STATE() {
