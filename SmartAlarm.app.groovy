@@ -30,7 +30,7 @@
  *  The latest version of this file can be found on GitHub at:
  *  https://github.com/statusbits/smartalarm/
  *
- *  Version 1.1.1 (2014-09-14)
+ *  Version 1.1.2 (2014-09-14)
  */
 
 definition(
@@ -51,6 +51,7 @@ preferences {
     page name:"pageZoneSettings"
     page name:"pageZoneBypass"
     page name:"pagePanelStatus"
+    page name:"pageButtonRemote"
 }
 
 def setupInit() {
@@ -93,6 +94,7 @@ def pageSetupMenu() {
             href "pageAlarmSettings", title:"Smart Alarm Settings", description:"Tap to open"
             href "pageZoneSettings", title:"Zone Settings", description:"Tap to open"
             href "pageZoneBypass", title:"Quick Zone Bypass", description:"Tap to open"
+            href "pageButtonRemote", title:"Configure Button Remote", description:"Tap to open"
         }
         section([title:"Options", mobileOnly:true]) {
             label title:"Assign a name", required:false
@@ -410,21 +412,90 @@ def pageZoneBypass() {
     }
 }
 
-def installed()
-{
+// Show "Configure Button Remote" page
+def pageButtonRemote() {
+    TRACE("pageButtonRemote()")
+
+    def textHelp =
+        "You can use remote controls such as Aeon Labs Minimote to arm " +
+        "and disarm Smart Alarm."
+
+    def inputButtons = [
+        name:       "buttons",
+        type:       "capability.button",
+        title:      "Which remote controls?",
+        multiple:   true,
+        required:   false
+    ]
+
+    def inputArmAway = [
+        name:           "buttonArmAway",
+        type:           "enum",
+        title:          "Which button to Arm Away?",
+        metadata:       [values:["1","2","3","4"]],
+        defaultValue:   "1",
+        required:       false
+    ]
+
+    def inputArmStay = [
+        name:           "buttonArmStay",
+        type:           "enum",
+        title:          "Which button to Arm Stay?",
+        metadata:       [values:["1","2","3","4"]],
+        defaultValue:   "2",
+        required:       false
+    ]
+
+    def inputDisarm = [
+        name:           "buttonDisarm",
+        type:           "enum",
+        title:          "Which button to Disarm?",
+        metadata:       [values:["1","2","3","4"]],
+        defaultValue:   "3",
+        required:       false
+    ]
+
+    def inputPanic = [
+        name:           "buttonPanic",
+        type:           "enum",
+        title:          "Which button to Arm Stay?",
+        metadata:       [values:["1","2","3","4"]],
+        defaultValue:   "4",
+        required:       false
+    ]
+
+    def pageProperties = [
+        name:       "pageButtonRemote",
+        title:      "Configure Button Remote",
+        nextPage:   "pageSetupMenu",
+        install:    false,
+        uninstall:  false
+    ]
+
+    return dynamicPage(pageProperties) {
+        section {
+            paragraph textHelp
+            input inputButtons
+            input inputArmAway
+            input inputArmStay
+            input inputDisarm
+            input inputPanic
+        }
+    }
+}
+
+def installed() {
     state.installed = true
     initialize()
 }
 
-def updated()
-{
+def updated() {
     unschedule()
     unsubscribe()
     initialize()
 }
 
-private initialize()
-{
+private initialize() {
     TRACE("initialize()")
     log.debug "settings: ${settings}"
     log.trace "${app.name}. ${textVersion()}. ${textCopyright()}"
@@ -453,11 +524,16 @@ private initialize()
     }
 
     panelReset()
+
     subscribe(location, onLocation)
+    if (settings.buttons) {
+        subscribe(settings.buttons, "button.pushed", onButtonPushed)
+    }
+
+    STATE()
 }
 
-def panelReset()
-{
+def panelReset() {
     TRACE("panelReset()")
 
     unschedule()
@@ -477,8 +553,7 @@ def panelReset()
     panelStatus()
 }
 
-private def panelDisarm()
-{
+private def panelDisarm() {
     TRACE("panelDisarm()")
 
     unschedule()
@@ -499,8 +574,7 @@ private def panelDisarm()
     panelStatus()
 }
 
-private def panelStatus()
-{
+private def panelStatus() {
     TRACE("panelStatus()")
 
     def msg = "${app.label} "
@@ -528,16 +602,14 @@ private def panelStatus()
     sendNotificationEvent(msg)
 }
 
-private def panelPanic()
-{
+private def panelPanic() {
     TRACE("panelPanic()")
 
     state.alarm = true;
     activateAlarm()
 }
 
-private def zoneInit(n)
-{
+private def zoneInit(n) {
     def z = n + 1
     def handlers = [
         onZone1, onZone2, onZone3, onZone4,
@@ -558,8 +630,7 @@ private def zoneInit(n)
     return zone
 }
 
-private def zoneReset(n)
-{
+private def zoneReset(n) {
     TRACE("zoneReset(${n})")
 
     def zone = state.zones[n]
@@ -574,8 +645,7 @@ private def zoneReset(n)
     }
 }
 
-private def zoneArm(n)
-{
+private def zoneArm(n) {
     def zone = state.zones[n]
     def devices = getZoneDevices(n)
 
@@ -608,8 +678,7 @@ private def zoneArm(n)
     log.debug "Zone '${zone.name}' armed"
 }
 
-private def zoneDisarm(n)
-{
+private def zoneDisarm(n) {
     def zone = state.zones[n]
     def devices = getZoneDevices(n)
 
@@ -625,8 +694,7 @@ private def zoneDisarm(n)
     log.debug "Zone '${zone.name}' disarmed"
 }
 
-private def getZoneDevices(n)
-{
+private def getZoneDevices(n) {
     if (n >= state.numZones)
         return null
 
@@ -642,8 +710,7 @@ private def getZoneDevices(n)
     return devices
 }
 
-private def onAlarm(n, evt)
-{
+private def onAlarm(n, evt) {
     TRACE("onAlarm(${n}, ${evt.displayName})")
 
     if (n >= state.numZones) {
@@ -694,8 +761,7 @@ def onZone14(evt) { onAlarm(13, evt) }
 def onZone15(evt) { onAlarm(14, evt) }
 def onZone16(evt) { onAlarm(15, evt) }
 
-def onLocation(evt)
-{
+def onLocation(evt) {
     TRACE("onLocation(${evt})")
 
     def mode = evt.value
@@ -733,13 +799,17 @@ def onLocation(evt)
     }
 }
 
-def onImageCapture(evt)
-{
-    TRACE("onImageCapture(${evt})")
+def onButtonPushed(evt) {
+    TRACE("onButtonPushed(${evt})")
+    log.trace("onButtonPushed not implemented!")
 }
 
-def activateAlarm()
-{
+def onImageCapture(evt) {
+    TRACE("onImageCapture(${evt})")
+    log.trace("onImageCapture not implemented!")
+}
+
+def activateAlarm() {
     if (!state.alarm) {
         TRACE("activateAlarm: Hmm... False alarm?")
         return
@@ -771,8 +841,7 @@ def activateAlarm()
     runIn(180, panelReset)
 }
 
-private def notify(msg)
-{
+private def notify(msg) {
     log.trace "[notify] ${msg}"
 
     if (settings.pushMessage) {
@@ -789,7 +858,7 @@ private def notify(msg)
 }
 
 private def textVersion() {
-    def text = "Version 1.1.1"
+    def text = "Version 1.1.2"
 }
 
 private def textCopyright() {
@@ -813,10 +882,10 @@ private def textLicense() {
 }
 
 private def TRACE(message) {
-    //log.debug message
+    log.debug message
 }
 
 private def STATE() {
-    //log.debug "settings: ${settings}"
-    //log.debug "state: ${state}"
+    log.debug "settings: ${settings}"
+    log.debug "state: ${state}"
 }
