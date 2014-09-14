@@ -460,7 +460,7 @@ def pageButtonRemote() {
     def inputPanic = [
         name:           "buttonPanic",
         type:           "enum",
-        title:          "Which button to Arm Stay?",
+        title:          "Which button to Panic?",
         metadata:       [values:["1","2","3","4"]],
         defaultValue:   "4",
         required:       false
