@@ -70,7 +70,9 @@ appears below the menu ribbon. Tap it and follow setup instructions.
 
 ### Revision History
 
-**Version 1.1.1. Released 2014-09-14**
+**Version 1.1.2. Released 2014-09-14**
+* You can now arm, disarm and trigger panic alarm using button remote (e.g.
+Aeon Labs Minimote).
 * Modified Setup Menu work flow and some help text.
 
 **Version 1.1.0. Released 2014-09-12**
