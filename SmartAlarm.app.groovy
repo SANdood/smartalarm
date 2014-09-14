@@ -1,7 +1,7 @@
 /**
  *  Smart Alarm.
  *
- *  Smart Alarm is home security application for the SmartThings home
+ *  Smart Alarm is a home security application for the SmartThings home
  *  automation system. You can configure up to 16 security zones and assign
  *  any number of contact, motion, moisture and smoke sensors to each zone.
  *  The alarm is armed and disarmed by simply setting the home 'mode'.
@@ -27,14 +27,10 @@
  *
  *  --------------------------------------------------------------------------
  *
- *  The latest version of this file can be found at:
- *  https://github.com/statusbits/smartalarm/blob/master/SmartAlarm.app.groovy
+ *  The latest version of this file can be found on GitHub at:
+ *  https://github.com/statusbits/smartalarm/
  *
- *  Revision History (see https://github.com/statusbits/smartalarm/ for details)
- *
- *  2014-09-12  V1.1.0
- *  2014-08-28  V1.0.1
- *  2014-07-04  V1.0.0
+ *  Version 1.1.1 (2014-09-14)
  */
 
 definition(
@@ -49,21 +45,59 @@ definition(
 
 preferences {
     page name:"setupInit"
+    page name:"pageSetupMenu"
     page name:"pageAbout"
-    page name:"setupConfigure"
-    page name:"setupZones"
-    page name:"setupControlPanel"
-    page name:"setupPanelStatus"
-    page name:"setupZoneBypass"
+    page name:"pageAlarmSettings"
+    page name:"pageZoneSettings"
+    page name:"pageZoneBypass"
+    page name:"pagePanelStatus"
 }
 
 def setupInit() {
     TRACE("setupInit()")
 
     if (state.installed) {
-        return setupControlPanel()
-    } else {
-        return pageAbout()
+        return pageSetupMenu()
+    }
+
+    // the app is not installed yet
+    state.zones = []
+    return pageAbout()
+}
+
+// Show 'Setup Menu' page
+def pageSetupMenu() {
+    TRACE("pageSetupMenu()")
+
+    def pageProperties = [
+        name:       "pageSetupMenu",
+        title:      "Setup Menu",
+        install:    true,
+        uninstall:  state.installed
+    ]
+
+    return dynamicPage(pageProperties) {
+        section {
+            buttons name:"buttonReset", required:false,
+                buttons:[
+                    [label:"Reset", action:"panelReset"]
+                ]
+            buttons name:"buttonPanic", required:false,
+                buttons:[
+                    [label:"Panic", action:"panelPanic", backgroundColor:"red"]
+                ]
+        }
+        section {
+            href "pageAbout", title:"About", description:"Tap to open"
+            href "pagePanelStatus", title:"Alarm Panel Status", description:"Tap to open"
+            href "pageAlarmSettings", title:"Smart Alarm Settings", description:"Tap to open"
+            href "pageZoneSettings", title:"Zone Settings", description:"Tap to open"
+            href "pageZoneBypass", title:"Quick Zone Bypass", description:"Tap to open"
+        }
+        section([title:"Options", mobileOnly:true]) {
+            label title:"Assign a name", required:false
+            mode title:"Enable only for specific mode(s)", required:false
+        }
     }
 }
 
@@ -74,13 +108,13 @@ def pageAbout() {
     def textAbout =
         "Smart Alarm turns SmartThings into a multi-zone alarm panel with " +
         "up to 16 security zones. Any number of sensors can be assigned to " +
-        "each zone. The alarm is armed and disarmed by simply setting the " +
-        "home 'mode'."
+        "each zone. The alarm can be armed and disarmed by simply setting " +
+        "the home 'mode'."
 
     def pageProperties = [
         name:       "pageAbout",
         title:      "About",
-        nextPage:   state.installed ? "setupControlPanel" : "setupConfigure",
+        nextPage:   state.installed ? "pageSetupMenu" : "pageAlarmSettings",
         uninstall:  state.installed
     ]
 
@@ -96,26 +130,21 @@ def pageAbout() {
 }
 
 // Show panel configuration page
-def setupConfigure() {
-    TRACE("setupConfigure()")
-
-    def helpPage =
-        "Tap the 'Next' button when done."
+def pageAlarmSettings() {
+    TRACE("pageAlarmSettings()")
 
     def helpNumZones =
-        "A security zone is an area of your home protected by one or more " +
-        "sensors, for example a bedroom, a garage, or an entire floor in a " +
-        "multistory building. You can configure up to 16 zones and assign " +
-        "any number of sensors (contact, motion, smoke or moisture) to each zone."
+        "You can configure up to 16 security zones. A security zone is an " +
+        "area of your home protected by one or more sensors, for example a " +
+        "room or an entire floor in a multistorey building. Any number of " +
+        "sensors (contact, motion, smoke or moisture) can be assigned to " +
+        "each zone."
 
     def helpArming =
-        "Smart Alarm can be armed in one of two modes: Stay and Away. " +
-        "Interior zones are not armed in Stay mode, allowing you to freely " +
-        "move inside your home.\n\n" +
-        "Smart Alarm is armed and disarmed simply by setting home mode. " +
-        "Just specify in which mode(s) the alarm should be armed and as " +
-        "soon as one of those modes becomes active, the alarm panel will " +
-        "arm itself. Switching to any other mode will automatically disarm it."
+        "Smart Alarm can be armed and disarmed by simply setting the home " +
+        "'mode'. There are two arming options - Stay and Away. Interior " +
+        "zones are not armed in Stay mode, allowing you to freely move " +
+        "inside your home."
 
     def helpExitDelay =
         "Exit delay allows you to exit premises within 45 seconds after " +
@@ -127,7 +156,7 @@ def setupConfigure() {
 
     def helpAlarm =
         "When an alarm is set off, Smart Alarm can turn on some sirens " +
-        "and/or lights."
+        "and light switches."
 
     def helpSilent =
         "Enable Silent mode if you wish to temporarily disable sirens and " +
@@ -223,17 +252,14 @@ def setupConfigure() {
     ]
 
     def pageProperties = [
-        name:       "setupConfigure",
+        name:       "pageAlarmSettings",
         title:      "Configure Smart Alarm",
-        nextPage:   "setupZones",
+        nextPage:   state.zones.size() ? "pageSetupMenu" : "pageZoneSettings",
         uninstall:  state.installed
     ]
 
     return dynamicPage(pageProperties) {
         section {
-            paragraph helpPage
-        }
-        section("Number of Zones") {
             paragraph helpNumZones
             input inputNumZones
         }
@@ -263,43 +289,29 @@ def setupConfigure() {
 }
 
 // Show zone configuration page
-def setupZones() {
-    TRACE("setupZones()")
+def pageZoneSettings() {
+    TRACE("pageZoneSettings()")
 
     def numZones = settings.numZones.toInteger()
     assert numZones > 0
 
     def helpPage =
-        "Tap on each section below to configure security zones, then tap the " +
-        "'Done' button to complete setup."
-
-    def helpName =
-        "You can give each zone a descriptive name, for example a 'Master Bedroom' " +
-        "or a 'Garage'."
-
-    def helpType =
-        "A zone can be one of three types - Exterior, Interior or Alert. An " +
-        "Exterior zone is armed when the alarm panel is armed in either Away or " +
-        "Stay mode. An interior zone is armed only in Away mode. An Alert zone " +
-        "is always armed and is typically used for fire and flood alarms."
-
-    def helpTriggers =
-        "A zone can be assigned one or more triggers, i.e. sensors that set off an " +
-        "alarm when activated."
-
-    def helpCameras =
-        "A zone can be assigned one or more security cameras. These cameras will " +
-        "take a snapshot whenever a zone is breached."
-
-    def helpBypass =
-        "If you wish to temporarily disable a zone, then turn on zone bypass. A zone " +
-        "in bypass mode shall never set off an alarm."
+        "Each zone can be designated as an Exterior, Interior or an Alert " +
+        "zone. Exterior zones are armed when the alarm panel is armed in " +
+        "either Away or Stay mode, Interior zones are armed only in Away " +
+        "mode and Alert zones are always armed and are typically used for " +
+        "fire and flood alarms.\n\n" +
+        "You can assign any number of sensors to each zone. When a sensor " +
+        "is activated, a zone will set off an alarm if it's armed.\n\n" +
+        "You can also assign one or more security cameras to each zone. " +
+        "The cameras will take a snapshot whenever a zone is breached.\n\n" +
+        "A zone can be temporarily disabled by turning on zone bypass."
 
     def pageProperties = [
-        name:       "setupZones",
+        name:       "pageZoneSettings",
         title:      "Configure Zones",
-        install:    true,
-        uninstall:  state.installed
+        nextPage:   "pageSetupMenu",
+        uninstall:  false
     ]
 
     return dynamicPage(pageProperties) {
@@ -307,68 +319,28 @@ def setupZones() {
             paragraph helpPage
         }
         for (int n = 1; n <= numZones; n++) {
-            section("Zone ${n}", hideable:true, hidden:true) {
-                paragraph helpName
-                input "z${n}_name", "string", title:"Zone name", defaultValue:"Zone ${n}"
-                paragraph helpType
+            section("Zone ${n}", hideable:true) {
+                input "z${n}_name", "string", title:"Give this zone a descriptive name", defaultValue:"Zone ${n}"
                 input "z${n}_type", "enum", title:"Select zone type", metadata:[values:["Exterior","Interior","Alert"]], defaultValue:"Exterior"
-                paragraph helpTriggers
                 input "z${n}_contact", "capability.contactSensor", title:"Which contact sensors?", multiple:true, required:false
                 input "z${n}_motion", "capability.motionSensor", title:"Which motion sensors?", multiple:true, required:false
                 input "z${n}_smoke", "capability.smokeDetector", title:"Which smoke sensors?", multiple:true, required:false
                 input "z${n}_water", "capability.waterSensor", title:"Which moisture sensors?", multiple:true, required:false
-                paragraph helpCameras
                 input "z${n}_camera", "capability.imageCapture", title:"Which cameras?", multiple:true, required:false
-                paragraph helpBypass
                 input "z${n}_bypass", "bool", title:"Enable zone bypass", defaultValue:false
             }
         }
     }
 }
 
-// Show control panel page
-def setupControlPanel() {
-    TRACE("setupControlPanel()")
-
-    def pageProperties = [
-        name:       "setupControlPanel",
-        title:      "Control Panel",
-        install:    true,
-        uninstall:  state.installed
-    ]
-
-    return dynamicPage(pageProperties) {
-        section {
-            buttons name:"buttonReset", required:false,
-                buttons:[
-                    [label:"Reset", action:"panelReset"]
-                ]
-            buttons name:"buttonPanic", required:false,
-                buttons:[
-                    [label:"Panic", action:"panelPanic", backgroundColor:"red"]
-                ]
-        }
-        section {
-            href "pageAbout", title:"About", description:"Tap to open"
-            href "setupPanelStatus", title:"Alarm Panel Status", description:"Tap to open"
-            href "setupZoneBypass", title:"Quick Zone Bypass", description:"Tap to open"
-            href "setupConfigure", title:"Configure Smart Alarm", description:"Tap to open"
-        }
-        section([title:"Options", mobileOnly:true]) {
-            label title:"Assign a name", required:false
-            mode title:"Enable only for specific mode(s)", required:false
-        }
-    }
-}
-
 // Show panel status page
-def setupPanelStatus() {
-    TRACE("setupPanelStatus()")
+def pagePanelStatus() {
+    TRACE("pagePanelStatus()")
 
     def pageProperties = [
-        name:       "setupPanelStatus",
+        name:       "pagePanelStatus",
         title:      "Alarm Panel Status",
-        install:    false,
+        nextPage:   "pageSetupMenu",
         uninstall:  false
     ]
 
@@ -418,11 +390,11 @@ def setupPanelStatus() {
 }
 
 // Show zone bypass page
-def setupZoneBypass() {
-    TRACE("setupZoneBypass()")
+def pageZoneBypass() {
+    TRACE("pageZoneBypass()")
 
     def pageProperties = [
-        name:       "setupZoneBypass",
+        name:       "pageZoneBypass",
         title:      "Quick Zone Bypass",
         install:    true,
         uninstall:  false
@@ -817,7 +789,7 @@ private def notify(msg)
 }
 
 private def textVersion() {
-    def text = "Version 1.1.0"
+    def text = "Version 1.1.1"
 }
 
 private def textCopyright() {

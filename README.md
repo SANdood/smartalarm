@@ -70,6 +70,9 @@ appears below the menu ribbon. Tap it and follow setup instructions.
 
 ### Revision History
 
+**Version 1.1.1. Released 2014-09-14**
+* Modified Setup Menu work flow and some help text.
+
 **Version 1.1.0. Released 2014-09-12**
 * Released under GPLv3 License.
 * Added 'About' page in the setup menu.
