@@ -9,30 +9,30 @@ the home 'mode'.
 
 ### Features
 
-* Up to 16 independent security zones
-* Unlimited number of sensors (contact, motion, moisture, smoke) per zone
-* Two arming modes - Away and Stay
-* Optional entry and exit delays
+* Up to 16 independent security zones.
+* Unlimited number of sensors (contact, motion, moisture, smoke) per zone.
+* Two arming modes - Away and Stay.
+* Optional entry and exit delays.
 * Zones can be designated as Interior (armed in Away mode only) Exterior
-(armed in both Away and Stay modes) and Alert (always armed)
-* Zone bypass allows quickly exclude select zones
+(armed in both Away and Stay modes) and Alert (always armed).
+* Zone bypass allows quickly exclude select zones.
 * Setting of an alarm can activate sirens, turn on switches, send push
-notifications and text messages
+notifications and text messages.
 * Silent mode disables sirens and switches, but leaves push notifications and
-text messages on
-* Panic button
+text messages on.
+* Panic button.
 
-Smart Alarm is armed and disarmed simply by setting SmartThings location 'mode'.
-For example, you can set it up to arm in Away mode when the location mode is
-set to 'Away' and to arm in Stay mode when the location mode is set to 'Night'.
-Setting location to any other mode, for example 'Home', will automatically
-disarm Smart Alarm.
+Smart Alarm can be armed and disarmed either using a remote control, for
+example [Aeon Labs Minimote](http://www.amazon.com/Aeon-Labs-DSA03202-v1-Minimote/dp/B00KU7ERAW)
+or by simply setting the home 'Mode'. For example, you can set it up to arm in
+Away mode when the home mode is set to 'Away' and to arm in Stay mode when the
+home mode is set to 'Night'. Setting home to any other mode, for example
+'Home', will automatically disarm Smart Alarm.
 
-This allows arming and disarming SmartAlarm using 'Hello Home' actions. For
-example, 'Good Night!' action activates the 'Night' mode, thus automatically
-arming Smart Alarm in Stay mode. Location modes can aslo be changed based on
-presence or other criteria, giving you many different ways to arm and disarm
-Smart Alarm.
+Using home Mode to arm and disarm Smart Alarm is a very flexible and powerful
+technique because home modes can be changed by other Smart Apps and 'Hello,
+Home' actions. For example, 'Good Night!' action activates the 'Night' mode,
+thus automatically arming Smart Alarm in Stay mode.
 
 
 ### Screenshots
