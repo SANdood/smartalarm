@@ -93,12 +93,12 @@ def pageSetupMenu() {
                 ]
         }
         section("Setup Menu") {
-            href "pageAbout", title:"About", description:"Tap to open"
-            href "pagePanelStatus", title:"Alarm Panel Status", description:"Tap to open"
-            href "pageAlarmSettings", title:"Smart Alarm Settings", description:"Tap to open"
+            href "pagePanelStatus", title:"Alarm Status", description:"Tap to open"
+            href "pageAlarmSettings", title:"Alarm Settings", description:"Tap to open"
             href "pageZoneSettings", title:"Zone Settings", description:"Tap to open"
             href "pageZoneBypass", title:"Quick Zone Bypass", description:"Tap to open"
-            href "pageButtonRemote", title:"Configure Button Remote", description:"Tap to open"
+            href "pageButtonRemote", title:"Configure Remote Control", description:"Tap to open"
+            href "pageAbout", title:"About Smart Alarm", description:"Tap to open"
         }
         section([title:"Options", mobileOnly:true]) {
             label title:"Assign a name", required:false
@@ -470,7 +470,7 @@ def pageButtonRemote() {
 
     def pageProperties = [
         name:       "pageButtonRemote",
-        title:      "Configure Button Remote",
+        title:      "Configure Remote Control",
         nextPage:   "pageSetupMenu",
         install:    false,
         uninstall:  false
