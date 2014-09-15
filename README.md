@@ -16,11 +16,13 @@ the home 'mode'.
 * Zones can be designated as Interior (armed in Away mode only) Exterior
 (armed in both Away and Stay modes) and Alert (always armed).
 * Zone bypass allows quickly exclude select zones.
-* Setting of an alarm can activate sirens, turn on switches, send push
-notifications and text messages.
+* When alarm is set off, Smart Alarm can execute selected 'Hello, Home'
+action, turn on sirens and light switches, send push notifications and text
+messages.
 * Silent mode disables sirens and switches, but leaves push notifications and
 text messages on.
-* Panic button.
+* Built-in control panel buttons - 'Arm Away', 'Arm Stay, 'Disarm' and
+'Panic'.
 
 Smart Alarm can be armed and disarmed either using a remote control, for
 example [Aeon Labs Minimote](http://www.amazon.com/Aeon-Labs-DSA03202-v1-Minimote/dp/B00KU7ERAW)
@@ -70,9 +72,12 @@ appears below the menu ribbon. Tap it and follow setup instructions.
 
 ### Revision History
 
-**Version 1.1.2. Released 2014-09-14**
-* You can now arm, disarm and trigger panic alarm using button remote (e.g.
-Aeon Labs Minimote).
+**Version 1.1.3. Released 2014-09-14**
+* You can now use remote control, such as Aeon Labs Minimote, to arm and
+disarm Smart Alarm, as well as trigger panic alarm. 
+* When alarm is set off, Smart Alarm can now execute 'Hello, Home' action in
+addition to turning on sirens and light switches
+* Added 'Arm Away', 'Arm Stay and 'Disarm' control panel buttons (iOS only).
 * Modified Setup Menu work flow and some help text.
 
 **Version 1.1.0. Released 2014-09-12**

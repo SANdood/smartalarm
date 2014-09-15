@@ -30,7 +30,7 @@
  *  The latest version of this file can be found on GitHub at:
  *  https://github.com/statusbits/smartalarm/
  *
- *  Version 1.1.2 (2014-09-14)
+ *  Version 1.1.3 (2014-09-14)
  */
 
 import groovy.json.JsonSlurper
@@ -161,8 +161,8 @@ def pageAlarmSettings() {
         "armed and disarm it within 45 seconds without setting of an alarm."
 
     def helpAlarm =
-        "When an alarm is set off, Smart Alarm can turn on some sirens " +
-        "and light switches."
+        "When an alarm is set off, Smart Alarm can execute a 'Hello, " +
+        "Home' action and/or turn on sirens and light switches."
 
     def helpSilent =
         "Enable Silent mode if you wish to temporarily disable sirens and " +
@@ -186,7 +186,8 @@ def pageAlarmSettings() {
         name:           "awayModes",
         type:           "mode",
         title:          "Arm Away in these Modes",
-        multiple:       true
+        multiple:       true,
+        required:       false
     ]
 
     def inputStayModes = [
@@ -211,6 +212,15 @@ def pageAlarmSettings() {
         title:          "Enable entry delay",
         defaultValue:   true,
         required:       true
+    ]
+
+    def hhActions = getHHActions()
+    def inputHelloHome = [
+        name:           "helloHomeAction",
+        type:           "enum",
+        title:          "Execute this Hello Home action",
+        metadata:       [values: hhActions],
+        required:       false
     ]
 
     def inputAlarms = [
@@ -280,6 +290,7 @@ def pageAlarmSettings() {
         }
         section("Alarm Options") {
             paragraph helpAlarm
+            input inputHelloHome
             input inputAlarms
             input inputSwitches
             paragraph helpSilent
@@ -848,6 +859,12 @@ def activateAlarm() {
         return
     }
 
+    // Execute Hello Home action
+    if (settings.helloHomeAction) {
+        log.trace "Executing HelloHome action \'${settings.helloHomeAction}\'"
+        location.helloHome.execute(settings.helloHomeAction)
+    }
+
     // Activate alarms and switches
     if (!settings.silent) {
         alarms*.both()
@@ -890,8 +907,17 @@ private def notify(msg) {
     }
 }
 
+private def getHHActions() {
+    def actions = []
+    location.helloHome?.getPhrases().each {
+        actions << "${it.label}"
+    }
+
+    return actions.sort()
+}
+
 private def textVersion() {
-    def text = "Version 1.1.2"
+    def text = "Version 1.1.3"
 }
 
 private def textCopyright() {
