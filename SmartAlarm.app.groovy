@@ -74,23 +74,25 @@ def pageSetupMenu() {
 
     def pageProperties = [
         name:       "pageSetupMenu",
-        title:      "Setup Menu",
+        title:      "Action Buttons",
         install:    true,
         uninstall:  state.installed
     ]
 
     return dynamicPage(pageProperties) {
         section {
-            buttons name:"buttonReset", required:false,
+            buttons name:"buttonRow1", required:false,
                 buttons:[
-                    [label:"Reset", action:"resetPanel"]
+                    [label:"Arm Away", action:"armAway"],
+                    [label:"Arm Stay", action:"armStay"],
                 ]
-            buttons name:"buttonPanic", required:false,
+            buttons name:"buttonRow2", required:false,
                 buttons:[
+                    [label:"Disarm", action:"disarm"],
                     [label:"Panic", action:"panic", backgroundColor:"red"]
                 ]
         }
-        section {
+        section("Setup Menu") {
             href "pageAbout", title:"About", description:"Tap to open"
             href "pagePanelStatus", title:"Alarm Panel Status", description:"Tap to open"
             href "pageAlarmSettings", title:"Smart Alarm Settings", description:"Tap to open"
