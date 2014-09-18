@@ -10,7 +10,7 @@ the home 'mode'.
 ### Features
 
 * Up to 16 independent security zones.
-* Unlimited number of sensors (contact, motion, moisture, smoke) per zone.
+* Unlimited number of sensors (contact, motion, moisture or smoke) per zone.
 * Two arming modes - Away and Stay.
 * Optional entry and exit delays.
 * Zones can be designated as Interior (armed in Away mode only) Exterior
@@ -24,17 +24,26 @@ text messages on.
 * Built-in control panel buttons - 'Arm Away', 'Arm Stay, 'Disarm' and
 'Panic'.
 
-Smart Alarm can be armed and disarmed either using a remote control, for
-example [Aeon Labs Minimote](http://www.amazon.com/Aeon-Labs-DSA03202-v1-Minimote/dp/B00KU7ERAW)
-or by simply setting the home 'Mode'. For example, you can set it up to arm in
-Away mode when the home mode is set to 'Away' and to arm in Stay mode when the
-home mode is set to 'Night'. Setting home to any other mode, for example
-'Home', will automatically disarm Smart Alarm.
 
+### Arming and Disarming
+
+Smart Alarm can be armed and disarmed in several different ways:
+
+1. Using built-in control panel buttons. Note, that currently control panel
+buttons are only available in iOS (iPhone) mobile app.
+2. Using a remote control, such as
+[Aeon Labs Minimote](http://www.amazon.com/Aeon-Labs-DSA03202-v1-Minimote/dp/B00KU7ERAW)
+3. By assigning home 'Modes'. For example, you can configure Smart Alarm to
+arm in Away mode when the home Mode is set to 'Away', to arm in Stay mode when
+the home Mode is set to 'Night' and disarm when the home Mode is set to 'Home'.
 Using home Mode to arm and disarm Smart Alarm is a very flexible and powerful
 technique because home modes can be changed by other Smart Apps and 'Hello,
 Home' actions. For example, 'Good Night!' action activates the 'Night' mode,
 thus automatically arming Smart Alarm in Stay mode.
+4. Using REST API endpoints. Smart Alarm provides REST endpoints to allow any
+web client to arm, disarm and trigger panic alarm using HTTP GET request. This
+feature can be used to integrate Smart Alarm into variety of Web dashboards
+and remote control web apps.
 
 
 ### Screenshots
@@ -44,6 +53,35 @@ thus automatically arming Smart Alarm in Stay mode.
 ![](https://sites.google.com/site/statusbits/pictures/SmartAlarm2.jpg)
 
 
+### Using REST API
+
+Smart Alarm provides REST API endpoints to allow any web client to arm, disarm
+and trigger panic alarm using HTTP GET request. This feature can be used to
+integrate Smart Alarm into variety of Web dashboards and remote control web
+apps.
+
+    BASE_URL/armaway  - Arms Smart Alarm in Away node
+    BASE_URL/armstay  - Arms Smart Alarm in Stay mode
+    BASE_URL/disarm   - Disarms SmartAlarm
+    BASE_URL/panic    - Triggers panic alarm
+    BASE_URL/status   - Returns current status
+
+The BASE_URL is https://graph.api.smartthings.com/api/smartapps/installations/APP_ID,
+where APP_ID is the installed Smart App ID.
+
+The REST API requires Access Token. You can obtain the access token using
+SmartThings OAuth2 work flow, however as a convenience, Smart Alarm creates
+the token for you. You can find your app's base URL and access token in the
+SmartThings IDE.
+
+Go to [My Locations](https://graph.api.smartthings.com/location/list) and
+click on the "smartapps" link for your Location. Then find "Smart Alarm" in
+the list of Installed SmartApps. Right-click on the "Smart Alarm" and select
+"Open Link in New Window". Scroll down to the "Application State" section.
+There you'll see "accessToken" and "restEndpoint". Save those values and
+plug them in into your web app. 
+
+ 
 ### Installation
 
 Smart Alarm app is available in the "Safety & Security" section of the Shared
@@ -71,6 +109,13 @@ appears below the menu ribbon. Tap it and follow setup instructions.
 
 
 ### Revision History
+
+**Version 1.2.0. Released 2014-09-18**
+* Implemented REST endpoints to arm, disarm and trigger panic alarm with HTTP
+GET requests.
+* Added configuration setting to select home 'Mode' for disarming alarm.
+* Exit and entry delays can now be configured for 15, 30, 45 or 60 seconds.
+* Fixed an issue with broken SmartThings runIn() API.
 
 **Version 1.1.3. Released 2014-09-14**
 * You can now use remote control, such as Aeon Labs Minimote, to arm and
