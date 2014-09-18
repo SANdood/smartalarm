@@ -1,12 +1,10 @@
 /**
  *  Smart Alarm.
  *
- *  Smart Alarm is a home security application for the SmartThings home
- *  automation system. You can configure up to 16 security zones and assign
- *  any number of contact, motion, moisture and smoke sensors to each zone.
- *  The alarm is armed and disarmed by simply setting the home 'mode'.
- *  For more information, please visit
- *  <https://github.com/statusbits/smartalarm/>.
+ *  Smart Alarm turns SmartThings into a multi-zone home security system with
+ *  up to 16 independent security zones. You can assign any number of contact,
+ *  motion, moisture and smoke sensors to each zone. Please visit
+ *  <https://github.com/statusbits/smartalarm/> for more information.
  *
  *  --------------------------------------------------------------------------
  *
@@ -30,7 +28,7 @@
  *  The latest version of this file can be found on GitHub at:
  *  https://github.com/statusbits/smartalarm/
  *
- *  Version 1.1.3 (2014-09-14)
+ *  Version 1.2.0 (2014-09-18)
  */
 
 import groovy.json.JsonSlurper
@@ -42,8 +40,31 @@ definition(
     description: "Turn SmartThings into a smart, multi-zone home security system.",
     category: "Safety & Security",
     iconUrl: "https://s3.amazonaws.com/smartapp-icons/Cat-SafetyAndSecurity/App-IsItSafe.png",
-    iconX2Url: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe@2x.png"
+    iconX2Url: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe@2x.png",
+    oauth: [displayName:"Smart Alarm", displayLink:"https://github.com/statusbits/smartalarm/"]
 )
+
+mappings {
+    path("/armaway") {
+        action: [ GET: "restArmAway" ]
+    }
+
+    path("/armstay") {
+        action: [ GET: "restArmStay" ]
+    }
+
+    path("/disarm") {
+        action: [ GET: "restDisarm" ]
+    }
+
+    path("/panic") {
+        action: [ GET: "restPanic" ]
+    }
+
+    path("/status") {
+        action: [ GET: "restStatus" ]
+    }
+}
 
 preferences {
     page name:"setupInit"
@@ -112,10 +133,9 @@ def pageAbout() {
     TRACE("pageAbout()")
 
     def textAbout =
-        "Smart Alarm turns SmartThings into a multi-zone alarm panel with " +
-        "up to 16 security zones. Any number of sensors can be assigned to " +
-        "each zone. The alarm can be armed and disarmed by simply setting " +
-        "the home 'mode'."
+        "Smart Alarm turns SmartThings into a multi-zone home security " +
+        "system with up to 16 independent security zones. Any number of " +
+        "sensors can be assigned to each zone."
 
     def pageProperties = [
         name:       "pageAbout",
@@ -140,25 +160,24 @@ def pageAlarmSettings() {
     TRACE("pageAlarmSettings()")
 
     def helpNumZones =
-        "You can configure up to 16 security zones. A security zone is an " +
-        "area of your home protected by one or more sensors, for example a " +
-        "room or an entire floor in a multistorey building. Any number of " +
-        "sensors (contact, motion, smoke or moisture) can be assigned to " +
-        "each zone."
+        "A security zone is an area of your home protected by one or more " +
+        "sensors, for example a single room or an entire floor in a " +
+        "multistory building. You can configure up to 16 security zones."
 
     def helpArming =
         "Smart Alarm can be armed and disarmed by simply setting the home " +
-        "'mode'. There are two arming options - Stay and Away. Interior " +
+        "'Mode'. There are two arming options - Stay and Away. Interior " +
         "zones are not armed in Stay mode, allowing you to freely move " +
         "inside your home."
 
     def helpExitDelay =
-        "Exit delay allows you to exit premises within 45 seconds after " +
-        "arming the alarm panel without setting of an alarm."
+        "Exit delay allows you to exit the premises without setting off an " +
+        "alarm within specified time after the alarm has been armed."
 
     def helpEntryDelay =
-        "Entry delay allows you to enter premises when Smart Alarm is " +
-        "armed and disarm it within 45 seconds without setting of an alarm."
+        "Entry delay allows you to enter the premises when Smart Alarm is " +
+        "armed and disarm it within specified time without setting of an " +
+        "alarm."
 
     def helpAlarm =
         "When an alarm is set off, Smart Alarm can execute a 'Hello, " +
@@ -198,19 +217,29 @@ def pageAlarmSettings() {
         required:       false
     ]
 
+    def inputDisarmModes = [
+        name:           "disarmModes",
+        type:           "mode",
+        title:          "Disarm in these Modes",
+        multiple:       true,
+        required:       false
+    ]
+
     def inputExitDelay = [
         name:           "exitDelay",
-        type:           "bool",
-        title:          "Enable exit delay",
-        defaultValue:   true,
+        type:           "enum",
+        metadata:       [values:["0","15","30","45","60"]],
+        title:          "Exit delay (in seconds)",
+        defaultValue:   "30",
         required:       true
     ]
 
     def inputEntryDelay = [
         name:           "entryDelay",
-        type:           "bool",
-        title:          "Enable entry delay",
-        defaultValue:   true,
+        type:           "enum",
+        metadata:       [values:["0","15","30","45","60"]],
+        title:          "Entry delay (in seconds)",
+        defaultValue:   "30",
         required:       true
     ]
 
@@ -283,6 +312,7 @@ def pageAlarmSettings() {
             paragraph helpArming
             input inputAwayModes
             input inputStayModes
+            input inputDisarmModes
             paragraph helpExitDelay
             input inputExitDelay
             paragraph helpEntryDelay
@@ -368,8 +398,8 @@ def pagePanelStatus() {
     } else {
         statusArmed = "Disarmed"
     }
-    def statusExitDelay = settings.exitDelay ? "On" : "Off"
-    def statusEntryDelay = settings.entryDelay ? "On" : "Off"
+    def statusExitDelay = settings.exitDelay ? settings.exitDelay.toInteger() : 0
+    def statusEntryDelay = settings.entryDelay ? settings.exitDelay.toInteger() : 0
     def statusSilent = settings.silent ? "On" : "Off"
     def statusPushMsg = settings.pushMessage ? "On" : "Off"
 
@@ -515,6 +545,9 @@ private initialize() {
     log.debug "settings: ${settings}"
     log.trace "${app.name}. ${textVersion()}. ${textCopyright()}"
 
+    state.restEndpoint = "https://graph.api.smartthings.com/api/smartapps/installations/${app.id}"
+    getAccessToken()
+
     state.numZones = settings.numZones.toInteger()
     state.exitDelay = settings.exitDelay ? 45 : 0
     state.entryDelay = settings.entryDelay ? 45 : 0
@@ -526,18 +559,6 @@ private initialize() {
             zoneArm(n)
         }
     }
-
-    if (settings.awayModes?.contains(location.mode)) {
-        state.armed = true
-        state.stay = false
-    } else if (settings.stayModes?.contains(location.mode)) {
-        state.armed = true
-        state.stay = true
-    } else {
-        state.armed = false
-        state.stay = false
-    }
-    resetPanel()
 
     // setup button actions
     state.buttonActions = [:]
@@ -557,6 +578,18 @@ private initialize() {
 
         subscribe(settings.buttons, "button.pushed", onButtonPushed)
     }
+
+    if (settings.awayModes?.contains(location.mode)) {
+        state.armed = true
+        state.stay = false
+    } else if (settings.stayModes?.contains(location.mode)) {
+        state.armed = true
+        state.stay = true
+    } else {
+        state.armed = false
+        state.stay = false
+    }
+    resetPanel()
 
     subscribe(location, onLocation)
 
@@ -740,7 +773,7 @@ private def onAlarm(n, evt) {
         } else {
             // See Issue #1.
             unschedule()
-            runIn(state.entryDelay, activateAlarm)
+            myRunIn(state.entryDelay, activateAlarm)
         }
     }
 }
@@ -767,35 +800,11 @@ def onLocation(evt) {
     TRACE("onLocation(${evt.displayName})")
 
     def mode = evt.value
-    def armed = false
-    def stay = atomicState.stay
     if (settings.awayModes?.contains(mode)) {
-        armed = true
-        stay = false
+        armAway()
     } else if (settings.stayModes?.contains(mode)) {
-        armed = true
-        stay = true
-    }
-
-    if (armed == atomicState.armed && state == atomicState.stay) {
-        return
-    }
-
-    if (armed) {
-        if (state.exitDelay) {
-            // See Issue #1.
-            unschedule()
-            if (stay) {
-                runIn(state.exitDelay, armStay)
-            } else {
-                runIn(state.exitDelay, armAway)
-            }
-        } else {
-            state.armed = true
-            state.stay = stay
-            resetPanel()
-        }
-    } else {
+        armStay()
+    } else if (settings.disarmModes?.contains(mode)) {
         disarm()
     }
 }
@@ -826,24 +835,49 @@ def onImageCapture(evt) {
 def armAway() {
     TRACE("armAway()")
 
+    if (state.armed && !state.stay) {
+        return
+    }
+
     state.armed = true
     state.stay = false
-    resetPanel()
+    if (state.exitDelay) {
+        unschedule()
+        myRunIn(state.exitDelay, resetPanel)
+        log.trace "Smart Alarm scheduled delayed 'Away' mode"
+    } else {
+        resetPanel()
+        log.trace "Smart Alarm armed in 'Away' mode"
+    }
 }
 
 def armStay() {
     TRACE("armStay()")
 
+    if (state.armed && state.stay) {
+        return
+    }
+
     state.armed = true
     state.stay = true
-    resetPanel()
+    if (state.exitDelay) {
+        unschedule()
+        myRunIn(state.exitDelay, resetPanel)
+        log.trace "Smart Alarm scheduled delayed 'Stay' mode"
+    } else {
+        resetPanel()
+        log.trace "Smart Alarm armed in 'Stay' mode"
+    }
 }
 
 def disarm() {
     TRACE("disarm()")
 
-    state.armed = false
-    resetPanel()
+    if (state.armed) {
+        state.armed = false
+        resetPanel()
+        log.trace "Smart Alarm disarmed"
+    }
 }
 
 def panic() {
@@ -851,6 +885,49 @@ def panic() {
 
     state.alarm = true;
     activateAlarm()
+}
+
+// .../armaway REST endpoint
+def restArmAway() {
+    TRACE("restArmAway()")
+
+    armAway()
+    return restStatus()
+}
+
+// .../armstay REST endpoint
+def restArmStay() {
+    TRACE("restArmStay()")
+
+    armStay()
+    return restStatus()
+}
+
+// .../disarm REST endpoint
+def restDisarm() {
+    TRACE("restDisarm()")
+
+    disarm()
+    return restStatus()
+}
+
+// .../panic REST endpoint
+def restPanic() {
+    TRACE("restPanic()")
+
+    panic()
+    return restStatus()
+}
+
+// .../status REST endpoint
+def restStatus() {
+    TRACE("restStatus()")
+
+    def status = [:]
+    status.status = state.armed ? (state.stay ? "armed stay" : "armed away") : "disarmed"
+    status.alarm = state.alarm
+
+    return status
 }
 
 def activateAlarm() {
@@ -888,7 +965,7 @@ def activateAlarm() {
     // Reset panel in 3 minutes
     // See Issue #1.
     unschedule()
-    runIn(180, resetPanel)
+    myRunIn(180, resetPanel)
 }
 
 private def notify(msg) {
@@ -916,8 +993,28 @@ private def getHHActions() {
     return actions.sort()
 }
 
+private def getAccessToken() {
+    if (atomicState.accessToken) {
+        return atomicState.accessToken
+    }
+
+    def token = createAccessToken()
+    TRACE("Created new access token: ${token})")
+
+    return token
+}
+
+private def myRunIn(delay_s, func) {
+    if (delay_s > 0) {
+        def tms = now() + (delay_s * 1000)
+        def date = new Date(tms)
+        runOnce(date, func)
+        TRACE("runOnce() scheduled for ${date}")
+    }
+}
+
 private def textVersion() {
-    def text = "Version 1.1.3"
+    def text = "Version 1.2.0"
 }
 
 private def textCopyright() {
@@ -945,6 +1042,6 @@ private def TRACE(message) {
 }
 
 private def STATE() {
-    log.debug "settings: ${settings}"
-    log.debug "state: ${state}"
+    log.trace "settings: ${settings}"
+    log.trace "state: ${state}"
 }
