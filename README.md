@@ -3,8 +3,7 @@
 Smart Alarm is a home security application for the
 [SmartThings](http://fbuy.me/bb9pe) home automation system. You can configure
 up to 16 security zones and assign any number of contact, motion, moisture and
-smoke sensors to each zone. The alarm is armed and disarmed simply by setting
-the home 'mode'.
+smoke sensors to each zone.
 
 
 ### Features
