@@ -74,7 +74,7 @@ def pageSetupMenu() {
 
     def pageProperties = [
         name:       "pageSetupMenu",
-        title:      "Action Buttons",
+        title:      "Control Panel",
         install:    true,
         uninstall:  state.installed
     ]
