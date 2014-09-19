@@ -47,9 +47,9 @@ and remote control web apps.
 
 ### Screenshots
 
-![](https://sites.google.com/site/statusbits/pictures/SmartAlarm1.jpg)
+![Smart Alarm Screenshot 1](http://statusbits.github.io/images/SmartAlarm-01.jpg)
 
-![](https://sites.google.com/site/statusbits/pictures/SmartAlarm2.jpg)
+![Smart Alarm Screenshot 2](http://statusbits.github.io/images/SmartAlarm-02.jpg)
 
 
 ### Using REST API
