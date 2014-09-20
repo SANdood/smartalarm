@@ -39,7 +39,7 @@ definition(
     author: "geko@statusbits.com",
     description: "Turn SmartThings into a smart, multi-zone home security system.",
     category: "Safety & Security",
-    iconUrl: "https://s3.amazonaws.com/smartapp-icons/Cat-SafetyAndSecurity/App-IsItSafe.png",
+    iconUrl: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe.png",
     iconX2Url: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe@2x.png",
     oauth: [displayName:"Smart Alarm", displayLink:"https://github.com/statusbits/smartalarm/"]
 )
