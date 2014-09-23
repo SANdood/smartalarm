@@ -28,7 +28,7 @@
  *  The latest version of this file can be found on GitHub at:
  *  https://github.com/statusbits/smartalarm/
  *
- *  Version 1.2.0 (2014-09-18)
+ *  Version 1.2.1 (2014-09-22)
  */
 
 import groovy.json.JsonSlurper
@@ -39,7 +39,7 @@ definition(
     author: "geko@statusbits.com",
     description: "Turn SmartThings into a smart, multi-zone home security system.",
     category: "Safety & Security",
-    iconUrl: "https://s3.amazonaws.com/smartapp-icons/Cat-SafetyAndSecurity/App-IsItSafe.png",
+    iconUrl: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe.png",
     iconX2Url: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe@2x.png",
     oauth: [displayName:"Smart Alarm", displayLink:"https://github.com/statusbits/smartalarm/"]
 )
@@ -96,6 +96,7 @@ def pageSetupMenu() {
     def pageProperties = [
         name:       "pageSetupMenu",
         title:      "Control Panel",
+        nextPage:   null,
         install:    true,
         uninstall:  state.installed
     ]
@@ -398,16 +399,14 @@ def pagePanelStatus() {
     } else {
         statusArmed = "Disarmed"
     }
-    def statusExitDelay = settings.exitDelay ? settings.exitDelay.toInteger() : 0
-    def statusEntryDelay = settings.entryDelay ? settings.exitDelay.toInteger() : 0
     def statusSilent = settings.silent ? "On" : "Off"
     def statusPushMsg = settings.pushMessage ? "On" : "Off"
 
     return dynamicPage(pageProperties) {
         section {
             paragraph "Alarm is now ${statusArmed}"
-            paragraph "Exit delay: ${statusExitDelay}"
-            paragraph "Entry delay: ${statusEntryDelay}"
+            paragraph "Exit delay: ${state.exitDelay}"
+            paragraph "Entry delay: ${state.entryDelay}"
             paragraph "Silent mode: ${statusSilent}"
             paragraph "Push messages: ${statusPushMsg}"
         }
@@ -530,27 +529,29 @@ def pageButtonRemote() {
 }
 
 def installed() {
+    TRACE("installed()")
+
     state.installed = true
     initialize()
 }
 
 def updated() {
+    TRACE("updated()")
+
     unschedule()
     unsubscribe()
     initialize()
 }
 
 private initialize() {
-    TRACE("initialize()")
-    log.debug "settings: ${settings}"
     log.trace "${app.name}. ${textVersion()}. ${textCopyright()}"
 
     state.restEndpoint = "https://graph.api.smartthings.com/api/smartapps/installations/${app.id}"
     getAccessToken()
 
     state.numZones = settings.numZones.toInteger()
-    state.exitDelay = settings.exitDelay ? 45 : 0
-    state.entryDelay = settings.entryDelay ? 45 : 0
+    state.exitDelay = settings.exitDelay ? settings.exitDelay.toInteger() : 0
+    state.entryDelay = settings.entryDelay ? settings.entryDelay.toInteger() : 0
     state.offSwitches = []
     state.zones = []
     for (int n = 0; n < state.numZones; n++) {
@@ -1014,7 +1015,7 @@ private def myRunIn(delay_s, func) {
 }
 
 private def textVersion() {
-    def text = "Version 1.2.0"
+    def text = "Version 1.2.1"
 }
 
 private def textCopyright() {

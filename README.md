@@ -109,6 +109,9 @@ appears below the menu ribbon. Tap it and follow setup instructions.
 
 ### Revision History
 
+**Version 1.2.1. Released 2014-09-22**
+* Fixed Issue #11 - Entry/Exit delays configuration changes are not applied.
+
 **Version 1.2.0. Released 2014-09-18**
 * Implemented REST endpoints to arm, disarm and trigger panic alarm with HTTP
 GET requests.
