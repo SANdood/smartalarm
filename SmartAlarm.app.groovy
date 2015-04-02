@@ -1,14 +1,14 @@
 /**
- *  Smart Alarm.
+ *  Smart Alarm is a versatile and highly configurable home security
+ *  for the SmartThings.
  *
- *  Smart Alarm turns SmartThings into a versatile home security system.
- *  Please visit <https://github.com/statusbits/smartalarm> for more
+ *  Please visit <http://statusbits.github.io/smartalarm/> for more
  *  information.
  *
- *  Version 2.2.1 (2014-12-06)
+ *  Version 2.2.6 (01/27/2015)
  *
  *  The latest version of this file can be found on GitHub at:
- *  <https://github.com/statusbits/smartalarm>
+ *  <https://github.com/statusbits/smartalarm/blob/master/SmartAlarm.groovy>
  *
  *  --------------------------------------------------------------------------
  *
@@ -34,7 +34,7 @@ definition(
     name: "Smart Alarm",
     namespace: "statusbits",
     author: "geko@statusbits.com",
-    description: "Turn SmartThings into a versatile home security system.",
+    description: "The ultimate home security application for SmartThings.",
     category: "Safety & Security",
     iconUrl: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe.png",
     iconX2Url: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe@2x.png",
@@ -43,23 +43,35 @@ definition(
 
 mappings {
     path("/armaway") {
-        action: [ GET: "restArmAway" ]
+        action: [ GET: "apiArmAway" ]
+    }
+
+    path("/armaway/:pincode") {
+        action: [ GET: "apiArmAway" ]
     }
 
     path("/armstay") {
-        action: [ GET: "restArmStay" ]
+        action: [ GET: "apiArmStay" ]
+    }
+
+    path("/armstay/:pincode") {
+        action: [ GET: "apiArmStay" ]
     }
 
     path("/disarm") {
-        action: [ GET: "restDisarm" ]
+        action: [ GET: "apiDisarm" ]
+    }
+
+    path("/disarm/:pincode") {
+        action: [ GET: "apiDisarm" ]
     }
 
     path("/panic") {
-        action: [ GET: "restPanic" ]
+        action: [ GET: "apiPanic" ]
     }
 
     path("/status") {
-        action: [ GET: "restStatus" ]
+        action: [ GET: "apiGetStatus" ]
     }
 }
 
@@ -67,20 +79,30 @@ preferences {
     page name:"pageSetup"
     page name:"pageAbout"
     page name:"pageSelectZones"
-    page name:"pageConfigureZones"
+    page name:"pageZoneSettings"
     page name:"pageAlarmSettings"
     page name:"pageNotifications"
+    page name:"pageVoiceOptions"
     page name:"pageZoneStatus"
-    page name:"pageButtonRemote"
+    page name:"pageRemoteControl"
+    page name:"pageRestApiOptions"
 }
 
 // Show setup page
 def pageSetup() {
     TRACE("pageSetup()")
 
-    if (state.installed == null) {
+    if (state.version != buildNumber()) {
         setupInit()
         return pageAbout()
+    }
+
+    def alarmStatus
+    if (state.armed) {
+        alarmStatus = "armed "
+        alarmStatus += state.stay ? "Stay" : "Away"
+    } else {
+        alarmStatus = "disarmed"
     }
 
     def pageProperties = [
@@ -91,14 +113,6 @@ def pageSetup() {
         uninstall:  state.installed
     ]
 
-    def alarmStatus
-    if (state.armed) {
-        alarmStatus = "armed "
-        alarmStatus += state.stay ? "Stay" : "Away"
-    } else {
-        alarmStatus = "disarmed"
-    }
-
     return dynamicPage(pageProperties) {
         section {
             paragraph "Smart Alarm is ${alarmStatus}"
@@ -107,11 +121,13 @@ def pageSetup() {
             }
         }
         section("Setup Menu") {
-            href "pageAlarmSettings", title:"Alarm Settings", description:"Tap to open"
+            href "pageAlarmSettings", title:"Smart Alarm Settings", description:"Tap to open"
             href "pageSelectZones", title:"Add/Remove Zones", description:"Tap to open"
-            href "pageConfigureZones", title:"Configure Zones", description:"Tap to open"
+            href "pageZoneSettings", title:"Zone Settings", description:"Tap to open"
             href "pageNotifications", title:"Notification Options", description:"Tap to open"
-            href "pageButtonRemote", title:"Configure Remote Control", description:"Tap to open"
+            href "pageVoiceOptions", title:"Voice Notification Options", description:"Tap to open"
+            href "pageRemoteControl", title:"Remote Control Settings", description:"Tap to open"
+            href "pageRestApiOptions", title:"REST API Options", description:"Tap to open"
             href "pageAbout", title:"About Smart Alarm", description:"Tap to open"
         }
         section([title:"Options", mobileOnly:true]) {
@@ -120,13 +136,22 @@ def pageSetup() {
     }
 }
 
-// Show 'About' page
+// Show "About" page
 def pageAbout() {
     TRACE("pageAbout()")
 
     def textAbout =
-        "Smart Alarm turns SmartThings into a versatile home " +
-        "security system."
+        "${textVersion()}\n${textCopyright()}\n\n" +
+        "You can contribute to the development of this app by making " +
+        "donation to geko@statusbits.com via PayPal."
+
+    def hrefInfo = [
+        url:        "http://statusbits.github.io/smartalarm/",
+        style:      "embedded",
+        title:      "Tap here for more information...",
+        description:"http://statusbits.github.io/smartalarm/",
+        required:   false,
+    ]
 
     def pageProperties = [
         name:       "pageAbout",
@@ -139,7 +164,7 @@ def pageAbout() {
     return dynamicPage(pageProperties) {
         section {
             paragraph textAbout
-            paragraph "${textVersion()}\n${textCopyright()}"
+            href hrefInfo
         }
         section("License") {
             paragraph textLicense()
@@ -147,7 +172,7 @@ def pageAbout() {
     }
 }
 
-// Show zone status page
+// Show "Zone Status" page
 def pageZoneStatus() {
     TRACE("pageZoneStatus()")
 
@@ -190,7 +215,7 @@ def pageZoneStatus() {
 
 // Show "Add/Remove Zones" page
 def pageSelectZones() {
-    TRACE("pageConfigureZones()")
+    TRACE("pageZoneSettings()")
 
     def helpPage =
         "A security zone is an area or your property protected by one of " +
@@ -247,9 +272,9 @@ def pageSelectZones() {
     }
 }
 
-// Show "Configure Zones" page
-def pageConfigureZones() {
-    TRACE("pageConfigureZones()")
+// Show "Zone Settings" page
+def pageZoneSettings() {
+    TRACE("pageZoneSettings()")
 
     def helpPage =
         "Each zone can be designated as Exterior (default), Interior, " +
@@ -310,8 +335,8 @@ def pageConfigureZones() {
     ]
 
     def pageProperties = [
-        name:       "pageConfigureZones",
-        title:      "Configure Zones",
+        name:       "pageZoneSettings",
+        title:      "Zone Settings",
         nextPage:   "pageSetup",
         uninstall:  state.installed
     ]
@@ -339,7 +364,7 @@ def pageConfigureZones() {
     }
 }
 
-// Show panel configuration page
+// Show "Smart Alarm Settings" page
 def pageAlarmSettings() {
     TRACE("pageAlarmSettings()")
 
@@ -361,7 +386,7 @@ def pageAlarmSettings() {
 
     def helpAlarm =
         "When an alarm is set off, Smart Alarm can turn on sirens and light" +
-        "switches and/or execute a 'Hello, Home' action."
+        "switches, take camera snapshots and execute a 'Hello, Home' action."
 
     def helpSilent =
         "Enable Silent mode if you wish to temporarily disable sirens and " +
@@ -442,6 +467,14 @@ def pageAlarmSettings() {
         required:       false
     ]
 
+    def inputCameras = [
+        name:           "cameras",
+        type:           "capability.imageCapture",
+        title:          "Take camera snapshots",
+        multiple:       true,
+        required:       false
+    ]
+
     def inputSilent = [
         name:           "silent",
         type:           "bool",
@@ -451,7 +484,7 @@ def pageAlarmSettings() {
 
     def pageProperties = [
         name:       "pageAlarmSettings",
-        title:      "Configure Smart Alarm",
+        title:      "Smart Alarm Settings",
         nextPage:   "pageSetup",
         uninstall:  state.installed
     ]
@@ -476,6 +509,7 @@ def pageAlarmSettings() {
             paragraph helpAlarm
             input inputAlarms
             input inputSwitches
+            input inputCameras
             input inputHelloHome
             paragraph helpSilent
             input inputSilent
@@ -490,8 +524,8 @@ def pageNotifications() {
     def helpAbout =
         "Smart Alarm has multiple ways of notifying you when its armed, " +
         "disarmed or when an alarm is set off, including Push " +
-        "notifications, SMS (text) messages or voice (text-to-speech) " +
-        "notification."
+        "notifications, SMS (text) messages and Pushbullet notification " +
+        "service."
 
     def inputPushAlarm = [
         name:           "pushMessage",
@@ -591,6 +625,79 @@ def pageNotifications() {
         defaultValue:   false
     ]
 
+    def inputPushbulletDevice = [
+        name:           "pushbullet",
+        type:           "device.pushbullet",
+        title:          "Use these Pushbullet devices",
+        multiple:       true,
+        required:       false
+    ]
+
+    def inputPushbulletAlarm = [
+        name:           "pushbulletAlarm",
+        type:           "bool",
+        title:          "Notify on Alarm",
+        defaultValue:   true
+    ]
+
+    def inputPushbulletStatus = [
+        name:           "pushbulletStatus",
+        type:           "bool",
+        title:          "Notify on Status Change",
+        defaultValue:   true
+    ]
+
+    def pageProperties = [
+        name:       "pageNotifications",
+        title:      "Notification Options",
+        nextPage:   "pageSetup",
+        uninstall:  state.installed
+    ]
+
+    return dynamicPage(pageProperties) {
+        section {
+            paragraph helpAbout
+        }
+        section("Push Notifications") {
+            input inputPushAlarm
+            input inputPushStatus
+        }
+        section("Text Message (SMS) #1") {
+            input inputPhone1
+            input inputPhone1Alarm
+            input inputPhone1Status
+        }
+        section("Text Message (SMS) #2") {
+            input inputPhone2
+            input inputPhone2Alarm
+            input inputPhone2Status
+        }
+        section("Text Message (SMS) #3") {
+            input inputPhone3
+            input inputPhone3Alarm
+            input inputPhone3Status
+        }
+        section("Text Message (SMS) #4") {
+            input inputPhone4
+            input inputPhone4Alarm
+            input inputPhone4Status
+        }
+        section("Pushbullet Notifications") {
+            input inputPushbulletDevice
+            input inputPushbulletAlarm
+            input inputPushbulletStatus
+        }
+    }
+}
+
+// Show "Voice Notification Options" page
+def pageVoiceOptions() {
+    TRACE("pageVoiceOptions()")
+
+    def helpAbout =
+        "Smart Alarm can utilize available speech synthesis devices (e.g. " +
+        "VLC Thing) to provide voice notifications."
+
     def inputSpeechDevice = [
         name:           "speechSynth",
         type:           "capability.speechSynthesis",
@@ -651,32 +758,6 @@ def pageNotifications() {
     return dynamicPage(pageProperties) {
         section {
             paragraph helpAbout
-        }
-        section("Push Notifications") {
-            input inputPushAlarm
-            input inputPushStatus
-        }
-        section("Text Message (SMS) #1") {
-            input inputPhone1
-            input inputPhone1Alarm
-            input inputPhone1Status
-        }
-        section("Text Message (SMS) #2") {
-            input inputPhone2
-            input inputPhone2Alarm
-            input inputPhone2Status
-        }
-        section("Text Message (SMS) #3") {
-            input inputPhone3
-            input inputPhone3Alarm
-            input inputPhone3Status
-        }
-        section("Text Message (SMS) #4") {
-            input inputPhone4
-            input inputPhone4Alarm
-            input inputPhone4Status
-        }
-        section("Voice Notifications") {
             input inputSpeechDevice
             input inputSpeechOnAlarm
             input inputSpeechOnStatus
@@ -688,9 +769,9 @@ def pageNotifications() {
     }
 }
 
-// Show "Configure Button Remote" page
-def pageButtonRemote() {
-    TRACE("pageButtonRemote()")
+// Show "Remote Control Options" page
+def pageRemoteControl() {
+    TRACE("pageRemoteControl()")
 
     def textHelp =
         "You can use remote controls such as Aeon Labs Minimote to arm " +
@@ -741,8 +822,8 @@ def pageButtonRemote() {
     ]
 
     def pageProperties = [
-        name:       "pageButtonRemote",
-        title:      "Configure Remote Control",
+        name:       "pageRemoteControl",
+        title:      "Remote Control Settings",
         nextPage:   "pageSetup",
         install:    false,
         uninstall:  false
@@ -760,6 +841,70 @@ def pageButtonRemote() {
     }
 }
 
+// Show "Control Panel Options" page
+def pageRestApiOptions() {
+    TRACE("pageRestApiOptions()")
+
+    def textHelp =
+        "Smart Alarm can be controlled remotely by any Web client using " +
+        "REST API. Please refer to Smart Alarm documentation for more " +
+        "information.\n\n" +
+        "WARNING: Make sure OAuth is enabled in the smart app settings " +
+        "(in SmartThings IDE) before enabling REST API."
+
+    def textPincode =
+        "You can specify optional PIN code to protect arming and disarming " +
+        "Smart Alarm via REST API from unauthorized access. If set, the " +
+        "PIN code is always required for disarming Smart Alarm, however " +
+        "you can optionally turn it off for arming Smart Alarm."
+
+    def inputRestApi = [
+        name:           "restApiEnabled",
+        type:           "bool",
+        title:          "Enable REST API",
+        defaultValue:   false
+    ]
+
+    def inputPincode = [
+        name:           "pincode",
+        type:           "number",
+        title:          "PIN Code",
+        required:       false
+    ]
+
+    def inputArmWithPin = [
+        name:           "armWithPin",
+        type:           "bool",
+        title:          "Require PIN code to arm",
+        defaultValue:   true
+    ]
+
+    def pageProperties = [
+        name:       "pageRestApiOptions",
+        title:      "REST API Options",
+        nextPage:   "pageSetup",
+        install:    false,
+        uninstall:  false
+    ]
+
+    return dynamicPage(pageProperties) {
+        section {
+            paragraph textHelp
+            input inputRestApi
+            paragraph textPincode
+            input inputPincode
+            input inputArmWithPin
+        }
+
+        if (isRestApiEnabled()) {
+            section("REST API Info") {
+                paragraph "Base URL:\n" + state.restEndpoint
+                paragraph "Access Token:\n" + state.accessToken
+            }
+        }
+    }
+}
+
 def installed() {
     TRACE("installed()")
 
@@ -770,28 +915,27 @@ def installed() {
 def updated() {
     TRACE("updated()")
 
-    unschedule()
     unsubscribe()
+    unschedule()
     initialize()
 }
 
 private def setupInit() {
     TRACE("setupInit()")
 
-    state.installed = false
-    state.version = 2
-    state.armed = false
-    state.alarm = false
-    state.zones = []
+    state.version = buildNumber()
+    if (state.installed == null) {
+        state.installed = false
+        state.armed = false
+        state.alarm = false
+        state.zones = []
+    }
 }
 
 private def initialize() {
     log.trace "${app.name}. ${textVersion()}. ${textCopyright()}"
 
     state._init_ = true
-    state.restEndpoint = "https://graph.api.smartthings.com/api/smartapps/installations/${app.id}"
-    getAccessToken()
-
     state.exitDelay = settings.exitDelay?.toInteger() ?: 0
     state.entryDelay = settings.entryDelay?.toInteger() ?: 0
     state.offSwitches = []
@@ -809,11 +953,30 @@ private def initialize() {
 
     initZones()
     initButtons()
+    initRestApi()
     resetPanel()
     subscribe(location, onLocation)
 
     STATE()
     state._init_ = false
+}
+
+private def initRestApi() {
+    if (settings.restApiEnabled) {
+        if (!state.accessToken) {
+            def token = createAccessToken()
+            TRACE("Created new access token: ${token})")
+        }
+        state.url = "https://graph.api.smartthings.com/api/smartapps/installations/${app.id}/"
+        log.info "REST API enabled"
+    } else {
+        state.url = ""
+        log.info "REST API disabled"
+    }
+}
+
+private def isRestApiEnabled() {
+    return settings.restApiEnabled && state.accessToken
 }
 
 private def initZones() {
@@ -929,11 +1092,17 @@ def resetPanel() {
     TRACE("resetPanel()")
 
     unschedule()
-    alarms*.off()
+    settings.alarms*.off()
 
     // only turn back off those switches that we turned on
-    if (state.offSwitches) {
-        state.offSwitches*.off()
+    def switchesOff = state.offSwitches
+    if (switchesOff) {
+        TRACE("switchesOff: ${switchesOff}")
+        settings.switches.each() {
+            if (switchesOff.contains(it.id)) {
+                it.off()
+            }
+        }
         state.offSwitches = []
     }
 
@@ -1035,8 +1204,10 @@ def onButtonPushed(evt) {
     if (button) {
         TRACE("Button '${button}' was pushed.")
         def action = state.buttonActions["${button}"]
-        log.trace "Executing button action ${action}()"
-        "${action}"()
+        if (action) {
+            log.trace "Executing button action ${action}()"
+            "${action}"()
+        }
     }
 }
 
@@ -1095,41 +1266,87 @@ def panic() {
     activateAlarm()
 }
 
-// .../armaway REST endpoint
-def restArmAway() {
-    TRACE("restArmAway()")
+// .../armaway REST API endpoint
+def apiArmAway() {
+    TRACE("apiArmAway()")
+
+    if (!isRestApiEnabled()) {
+        log.error "REST API disabled"
+        return httpError(403, "Access denied")
+    }
+
+    if (settings.pincode && settings.armWithPin) {
+        if (params.pincode != settings.pincode.toString()) {
+            log.error "Invalid PIN code '${params.pincode}'"
+            return httpError(403, "Access denied")
+        }
+    }
 
     armAway()
-    return restStatus()
+    return apiGetStatus()
 }
 
-// .../armstay REST endpoint
-def restArmStay() {
-    TRACE("restArmStay()")
+// .../armstay REST API endpoint
+def apiArmStay() {
+    TRACE("apiArmStay()")
+
+    if (!isRestApiEnabled()) {
+        log.error "REST API disabled"
+        return httpError(403, "Access denied")
+    }
+
+    if (settings.pincode && settings.armWithPin) {
+        if (params.pincode != settings.pincode.toString()) {
+            log.error "Invalid PIN code '${params.pincode}'"
+            return httpError(403, "Access denied")
+        }
+    }
 
     armStay()
-    return restStatus()
+    return apiGetStatus()
 }
 
-// .../disarm REST endpoint
-def restDisarm() {
-    TRACE("restDisarm()")
+// .../disarm REST API endpoint
+def apiDisarm() {
+    TRACE("apiDisarm()")
+
+    if (!isRestApiEnabled()) {
+        log.error "REST API disabled"
+        return httpError(403, "Access denied")
+    }
+
+    if (settings.pincode) {
+        if (params.pincode != settings.pincode.toString()) {
+            log.error "Invalid PIN code '${params.pincode}'"
+            return httpError(403, "Access denied")
+        }
+    }
 
     disarm()
-    return restStatus()
+    return apiGetStatus()
 }
 
-// .../panic REST endpoint
-def restPanic() {
-    TRACE("restPanic()")
+// .../panic REST API endpoint
+def apiPanic() {
+    TRACE("apiPanic()")
+
+    if (!isRestApiEnabled()) {
+        log.error "REST API disabled"
+        return httpError(403, "Access denied")
+    }
 
     panic()
-    return restStatus()
+    return apiGetStatus()
 }
 
-// .../status REST endpoint
-def restStatus() {
-    TRACE("restStatus()")
+// .../status REST API endpoint
+def apiGetStatus() {
+    TRACE("apiGetStatus()")
+
+    if (!isRestApiEnabled()) {
+        log.error "REST API disabled"
+        return httpError(403, "Access denied")
+    }
 
     def status = [:]
     status.status = state.armed ? (state.stay ? "armed stay" : "armed away") : "disarmed"
@@ -1148,14 +1365,19 @@ def activateAlarm() {
 
     // Activate alarms and switches
     if (!settings.silent) {
-        alarms*.both()
+        settings.alarms*.both()
 
         // Only turn on those switches that are currently off
-        state.offSwitches = switches.findAll { it?.currentSwitch == "off" }
-        if (state.offSwitches) {
-            state.offSwitches*.on()
+        def switchesOn = settings.switches?.findAll { it?.currentSwitch == "off" }
+        TRACE("switchesOn: ${switchesOn}")
+        if (switchesOn) {
+            switchesOn*.on()
+            state.offSwitches = switchesOn.collect { it.id }
         }
     }
+
+    // Take camera snapshots
+    settings.cameras*.take()
 
     // Execute Hello Home action
     if (settings.helloHomeAction) {
@@ -1180,16 +1402,10 @@ def activateAlarm() {
 
 private def notify(msg) {
     TRACE("notify(${msg})")
-
-    // NOTE: cannot call sendPush() from installed() or updated()
-    if (state._init_) {
-        return
-    }
-
     if (state.alarm) {
         // Alarm notification
         if (settings.pushMessage) {
-            sendPush(msg)
+            mySendPush(msg)
         } else {
             sendNotificationEvent(msg)
         }
@@ -1209,10 +1425,14 @@ private def notify(msg) {
         if (settings.smsAlarmPhone4 && settings.phone4) {
             sendSms(phone4, msg)
         }
+
+        if (settings.pushbulletAlarm && settings.pushbullet) {
+        	settings.pushbullet*.push(msg)
+        }    
     } else {
         // Status change notification
         if (settings.pushStatusMessage) {
-            sendPush(msg)
+            mySendPush(msg)
         } else {
             sendNotificationEvent(msg)
         }
@@ -1231,6 +1451,10 @@ private def notify(msg) {
 
         if (settings.smsStatusPhone4 && settings.phone4) {
             sendSms(phone4, msg)
+        }
+
+        if (settings.pushbulletStatus && settings.pushbullet) {
+        	settings.pushbullet*.push(msg)
         }
     }
 }
@@ -1293,11 +1517,7 @@ private def getStatusPhrase() {
 }
 
 private def getHelloHomeActions() {
-    def actions = []
-    location.helloHome?.getPhrases().each {
-        actions << "${it.label}"
-    }
-
+    def actions = location.helloHome?.getPhrases().collect() { it.label }
     return actions.sort()
 }
 
@@ -1341,17 +1561,6 @@ private def getDeviceById(id) {
     return device
 }
 
-private def getAccessToken() {
-    if (atomicState.accessToken) {
-        return atomicState.accessToken
-    }
-
-    def token = createAccessToken()
-    TRACE("Created new access token: ${token})")
-
-    return token
-}
-
 private def myRunIn(delay_s, func) {
     TRACE("myRunIn(${delay_s})")
 
@@ -1363,12 +1572,28 @@ private def myRunIn(delay_s, func) {
     }
 }
 
+private def mySendPush(msg) {
+    // cannot call sendPush() from installed() or updated()
+    if (!state._init_) {
+        // sendPush can throw an exception
+        try {
+            sendPush(msg)
+        } catch (e) {
+            log.error e
+        }
+    }
+}
+
+private def buildNumber() {
+    return 150127
+}
+
 private def textVersion() {
-    def text = "Version 2.2.1"
+    def text = "Version 2.2.6 (01/27/2015)"
 }
 
 private def textCopyright() {
-    def text = "Copyright (c) 2014 Statusbits.com"
+    def text = "Copyright © 2014 Statusbits.com"
 }
 
 private def textLicense() {
