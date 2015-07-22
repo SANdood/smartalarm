@@ -1,11 +1,13 @@
 /**
- *  Smart Alarm is a versatile and highly configurable home security
- *  for the SmartThings.
+ *  Smart Alarm is a multi-zone virtual alarm panel, featuring customizable
+ *  security zones. Setting of an alarm can activate sirens, turn on light
+ *  switches, push notification and text message. Alarm is armed and disarmed
+ *  simply by setting SmartThings location 'mode'.
  *
  *  Please visit <http://statusbits.github.io/smartalarm/> for more
  *  information.
  *
- *  Version 2.2.6 (01/27/2015)
+ *  Version 2.4.3 (7/7/2015)
  *
  *  The latest version of this file can be found on GitHub at:
  *  <https://github.com/statusbits/smartalarm/blob/master/SmartAlarm.groovy>
@@ -34,12 +36,30 @@ definition(
     name: "Smart Alarm",
     namespace: "statusbits",
     author: "geko@statusbits.com",
-    description: "The ultimate home security application for SmartThings.",
+    description: '''A multi-zone virtual alarm panel, featuring customizable\
+ security zones. Setting of an alarm can activate sirens, turn on light\
+ switches, push notification and text message. Alarm is armed and disarmed\
+ simply by setting SmartThings location 'mode'.''',
     category: "Safety & Security",
-    iconUrl: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe.png",
-    iconX2Url: "https://s3.amazonaws.com/smartapp-icons/SafetyAndSecurity/App-IsItSafe@2x.png",
-    oauth: [displayName:"Smart Alarm", displayLink:"https://github.com/statusbits/smartalarm/"]
+    iconUrl: "http://statusbits.github.io/icons/SmartAlarm-128.png",
+    iconX2Url: "http://statusbits.github.io/icons/SmartAlarm-256.png",
+    oauth: [displayName:"Smart Alarm", displayLink:"http://statusbits.github.io/smartalarm/"]
 )
+
+preferences {
+    page name:"pageSetup"
+    page name:"pageAbout"
+    page name:"pageUninstall"
+    page name:"pageStatus"
+    page name:"pageHistory"
+    page name:"pageSelectZones"
+    page name:"pageConfigureZones"
+    page name:"pageArmingOptions"
+    page name:"pageAlarmOptions"
+    page name:"pageNotifications"
+    page name:"pageRemoteOptions"
+    page name:"pageRestApiOptions"
+}
 
 mappings {
     path("/armaway") {
@@ -71,62 +91,50 @@ mappings {
     }
 
     path("/status") {
-        action: [ GET: "apiGetStatus" ]
+        action: [ GET: "apiStatus" ]
     }
-}
-
-preferences {
-    page name:"pageSetup"
-    page name:"pageAbout"
-    page name:"pageSelectZones"
-    page name:"pageZoneSettings"
-    page name:"pageAlarmSettings"
-    page name:"pageNotifications"
-    page name:"pageVoiceOptions"
-    page name:"pageZoneStatus"
-    page name:"pageRemoteControl"
-    page name:"pageRestApiOptions"
 }
 
 // Show setup page
 def pageSetup() {
-    TRACE("pageSetup()")
+    LOG("pageSetup()")
 
-    if (state.version != buildNumber()) {
-        setupInit()
-        return pageAbout()
+    if (state.version != getVersion()) {
+        return setupInit() ? pageAbout() : pageUninstall()
     }
 
-    def alarmStatus
-    if (state.armed) {
-        alarmStatus = "armed "
-        alarmStatus += state.stay ? "Stay" : "Away"
-    } else {
-        alarmStatus = "disarmed"
+    if (getNumZones() == 0) {
+        return pageSelectZones()
     }
+
+    def alarmStatus = "Alarm is ${getAlarmStatus()}"
 
     def pageProperties = [
         name:       "pageSetup",
-        title:      "Status",
+        //title:      "Status",
         nextPage:   null,
         install:    true,
         uninstall:  state.installed
     ]
 
     return dynamicPage(pageProperties) {
-        section {
-            paragraph "Smart Alarm is ${alarmStatus}"
-            if (state.zones.size()) {
-                href "pageZoneStatus", title:"Zone Status", description:"Tap to open"
+        section("Status") {
+            if (state.zones.size() > 0) {
+                href "pageStatus", title:alarmStatus, description:"Tap for more information"
+            } else {
+                paragraph alarmStatus
+            }
+            if (state.history.size() > 0) {
+                href "pageHistory", title:"Event History", description:"Tap to view"
             }
         }
         section("Setup Menu") {
-            href "pageAlarmSettings", title:"Smart Alarm Settings", description:"Tap to open"
             href "pageSelectZones", title:"Add/Remove Zones", description:"Tap to open"
-            href "pageZoneSettings", title:"Zone Settings", description:"Tap to open"
+            href "pageConfigureZones", title:"Configure Zones", description:"Tap to open"
+            href "pageArmingOptions", title:"Arming/Disarming Options", description:"Tap to open"
+            href "pageAlarmOptions", title:"Alarm Options", description:"Tap to open"
             href "pageNotifications", title:"Notification Options", description:"Tap to open"
-            href "pageVoiceOptions", title:"Voice Notification Options", description:"Tap to open"
-            href "pageRemoteControl", title:"Remote Control Settings", description:"Tap to open"
+            href "pageRemoteOptions", title:"Remote Control Options", description:"Tap to open"
             href "pageRestApiOptions", title:"REST API Options", description:"Tap to open"
             href "pageAbout", title:"About Smart Alarm", description:"Tap to open"
         }
@@ -138,10 +146,10 @@ def pageSetup() {
 
 // Show "About" page
 def pageAbout() {
-    TRACE("pageAbout()")
+    LOG("pageAbout()")
 
     def textAbout =
-        "${textVersion()}\n${textCopyright()}\n\n" +
+        "Version ${getVersion()}\n${textCopyright()}\n\n" +
         "You can contribute to the development of this app by making " +
         "donation to geko@statusbits.com via PayPal."
 
@@ -150,19 +158,18 @@ def pageAbout() {
         style:      "embedded",
         title:      "Tap here for more information...",
         description:"http://statusbits.github.io/smartalarm/",
-        required:   false,
+        required:   false
     ]
 
     def pageProperties = [
         name:       "pageAbout",
-        title:      "About",
+        //title:      "About",
         nextPage:   "pageSetup",
-        install:    false,
         uninstall:  false
     ]
 
     return dynamicPage(pageProperties) {
-        section {
+        section("About") {
             paragraph textAbout
             href hrefInfo
         }
@@ -172,42 +179,124 @@ def pageAbout() {
     }
 }
 
-// Show "Zone Status" page
-def pageZoneStatus() {
-    TRACE("pageZoneStatus()")
+// Show "Uninstall" page
+def pageUninstall() {
+    LOG("pageUninstall()")
+
+    def text =
+        "Smart Alarm version ${getVersion()} is not backward compatible " +
+        "with the currently installed version. Please uninstall the " +
+        "current version by tapping the Uninstall button below, then " +
+        "re-install Smart Alarm from the Dashboard. We are sorry for the " +
+        "inconvenience."
 
     def pageProperties = [
-        name:       "pageZoneStatus",
-        title:      "Zone Status",
+        name:       "pageUninstall",
+        title:      "Warning!",
+        nextPage:   null,
+        uninstall:  true,
+        install:    false
+    ]
+
+    return dynamicPage(pageProperties) {
+        section("Uninstall Required") {
+            paragraph text
+        }
+    }
+}
+
+// Show "Status" page
+def pageStatus() {
+    LOG("pageStatus()")
+
+    def pageProperties = [
+        name:       "pageStatus",
+        //title:      "Status",
         nextPage:   "pageSetup",
         uninstall:  false
     ]
 
     return dynamicPage(pageProperties) {
-        state.zones.each() {
-            def device = getDeviceById(it.deviceId)
-            def zoneStatus = "${it.sensorType}, "
+        section("Status") {
+            paragraph "Alarm is ${getAlarmStatus()}"
+        }
 
-            if (it.alert) {
-                zoneStatus += "alert"
-            } else if (it.interior) {
-                zoneStatus += "interior"
-            } else if (it.entrance) {
-                zoneStatus += "entrance"
-            } else {
-                zoneStatus += "exterior"
+        if (settings.z_contact) {
+            section("Contact Sensors") {
+                settings.z_contact.each() {
+                    def text = getZoneStatus(it, "contact")
+                    if (text) {
+                        paragraph text
+                    }
+                }
             }
+        }
 
-            if (it.bypass) {
-                zoneStatus += ", bypassed"
-            } else if (it.armed) {
-                zoneStatus += ", armed"
-            } else {
-                zoneStatus += ", disarmed"
+        if (settings.z_motion) {
+            section("Motion Sensors") {
+                settings.z_motion.each() {
+                    def text = getZoneStatus(it, "motion")
+                    if (text) {
+                        paragraph text
+                    }
+                }
             }
+        }
 
-            section(device.displayName) {
-                paragraph zoneStatus
+        if (settings.z_movement) {
+            section("Movement Sensors") {
+                settings.z_movement.each() {
+                    def text = getZoneStatus(it, "acceleration")
+                    if (text) {
+                        paragraph text
+                    }
+                }
+            }
+        }
+
+        if (settings.z_smoke) {
+            section("Smoke & CO Sensors") {
+                settings.z_smoke.each() {
+                    def text = getZoneStatus(it, "smoke")
+                    if (text) {
+                        paragraph text
+                    }
+                }
+            }
+        }
+
+        if (settings.z_water) {
+            section("Moisture Sensors") {
+                settings.z_water.each() {
+                    def text = getZoneStatus(it, "water")
+                    if (text) {
+                        paragraph text
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Show "History" page
+def pageHistory() {
+    LOG("pageHistory()")
+
+    def pageProperties = [
+        name:       "pageHistory",
+        //title:      "Event History",
+        nextPage:   "pageSetup",
+        uninstall:  false
+    ]
+
+    def history = atomicState.history
+
+    return dynamicPage(pageProperties) {
+        section("Event History") {
+            if (history.size() == 0) {
+                paragraph "No history available."
+            } else {
+                paragraph "Not implemented"
             }
         }
     }
@@ -215,12 +304,11 @@ def pageZoneStatus() {
 
 // Show "Add/Remove Zones" page
 def pageSelectZones() {
-    TRACE("pageZoneSettings()")
+    LOG("pageSelectZones()")
 
     def helpPage =
-        "A security zone is an area or your property protected by one of " +
-        "the available sensors (contact, motion, moisture or smoke). When " +
-        "the zone is armed, activating the sensor will set off an alarm."
+        "A security zone is an area of your property protected by a sensor " +
+        "(contact, motion, movement, moisture or smoke)."
 
     def inputContact = [
         name:       "z_contact",
@@ -238,10 +326,18 @@ def pageSelectZones() {
         required:   false
     ]
 
+    def inputMovement = [
+        name:       "z_movement",
+        type:       "capability.accelerationSensor",
+        title:      "Which movement sensors?",
+        multiple:   true,
+        required:   false
+    ]
+
     def inputSmoke = [
         name:       "z_smoke",
         type:       "capability.smokeDetector",
-        title:      "Which smoke sensors?",
+        title:      "Which smoke & CO sensors?",
         multiple:   true,
         required:   false
     ]
@@ -256,213 +352,221 @@ def pageSelectZones() {
 
     def pageProperties = [
         name:       "pageSelectZones",
-        title:      "Add/Remove Zones",
-        nextPage:   "pageSetup",
-        uninstall:  state.installed
+        //title:      "Add/Remove Zones",
+        nextPage:   "pageConfigureZones",
+        uninstall:  false
     ]
 
     return dynamicPage(pageProperties) {
-        section {
+        section("Add/Remove Zones") {
             paragraph helpPage
             input inputContact
             input inputMotion
+            input inputMovement
             input inputSmoke
             input inputMoisture
         }
     }
 }
 
-// Show "Zone Settings" page
-def pageZoneSettings() {
-    TRACE("pageZoneSettings()")
+// Show "Configure Zones" page
+def pageConfigureZones() {
+    LOG("pageConfigureZones()")
 
-    def helpPage =
-        "Each zone can be designated as Exterior (default), Interior, " +
-        "Entrance or Alert zone."
+    def helpZones =
+        "Security zones can be configured as either Exterior, Interior, " +
+        "Alert or Bypass. Exterior zones are armed in both Away and Stay " +
+        "modes, while Interior zones are armed only in Away mode, allowing " +
+        "you to move freely inside the premises while the alarm is armed " +
+        "in Stay mode. Alert zones are always armed and are typically used " +
+        "for smoke and flood alarms. Bypass zones are never armed. This " +
+        "allows you to temporarily exclude a zone from your security " +
+        "system.\n\n" +
+        "You can disable Entry and Exit Delays for individual zones."
 
-    def helpInteriorZones =
-        "Zones designated as Interior will not be armed in Stay mode, " +
-        "allowing you to freely move inside the premises while the alarm " +
-        "is armed."
-
-    def helpEntranceZones =
-        "If a zone is designated as Entrance, then alarm will not sound " +
-        "for a specified number of seconds, allowing you to disarm the " +
-        "alarm after entering the premises."
-
-    def helpAlertZones =
-        "Zones designated as Alert are always armed and are typically used " +
-        "for smoke and flood alarms."
-
-    def helpBypassZones =
-        "You can prevent a zone from setting off an alarm by enabling zone " +
-        "'bypass'. Bypassed zones will not be armed."
-
-    def inputEntranceZones = [
-        name:           "entranceZones",
-        type:           "enum",
-        title:          "Select entrance zones",
-        metadata:       [values: getZoneNames()],
-        multiple:       true,
-        required:       false
-    ]
-
-    def inputInteriorZones = [
-        name:           "interiorZones",
-        type:           "enum",
-        title:          "Select interior zones",
-        metadata:       [values: getZoneNames()],
-        multiple:       true,
-        required:       false
-    ]
-
-    def inputAlertZones = [
-        name:           "alertZones",
-        type:           "enum",
-        title:          "Select alert zones",
-        metadata:       [values: getZoneNames()],
-        multiple:       true,
-        required:       false
-    ]
-
-    def inputBypassZones = [
-        name:           "bypassZones",
-        type:           "enum",
-        title:          "Bypass selected zones",
-        metadata:       [values: getZoneNames()],
-        multiple:       true,
-        required:       false
-    ]
+    def zoneTypes = ["exterior", "interior", "alert", "bypass"]
 
     def pageProperties = [
-        name:       "pageZoneSettings",
-        title:      "Zone Settings",
+        name:       "pageConfigureZones",
+        //title:      "Configure Zones",
         nextPage:   "pageSetup",
-        uninstall:  state.installed
+        uninstall:  false
     ]
 
     return dynamicPage(pageProperties) {
-        section {
-            paragraph helpPage
+        section("Configure Zones") {
+            paragraph helpZones
         }
-        section("Interior Zones") {
-            paragraph helpInteriorZones
-            input inputInteriorZones
+
+        if (settings.z_contact) {
+            def devices = settings.z_contact.sort {it.displayName}
+            devices.each() {
+                def devId = it.id
+                section("${it.displayName} (contact)") {
+                    input "type_${devId}", "enum", title:"Zone Type", metadata:[values:zoneTypes], defaultValue:"exterior"
+                    input "delay_${devId}", "bool", title:"Entry/Exit Delays", defaultValue:true
+                }
+            }
         }
-        section("Entrance Zones") {
-            paragraph helpEntranceZones
-            input inputEntranceZones
+
+        if (settings.z_motion) {
+            def devices = settings.z_motion.sort {it.displayName}
+            devices.each() {
+                def devId = it.id
+                section("${it.displayName} (motion)") {
+                    input "type_${devId}", "enum", title:"Zone Type", metadata:[values:zoneTypes], defaultValue:"interior"
+                    input "delay_${devId}", "bool", title:"Entry/Exit Delays", defaultValue:false
+                }
+            }
         }
-        section("Alert Zones") {
-            paragraph helpAlertZones
-            input inputAlertZones
+
+        if (settings.z_movement) {
+            def devices = settings.z_movement.sort {it.displayName}
+            devices.each() {
+                def devId = it.id
+                section("${it.displayName} (movement)") {
+                    input "type_${devId}", "enum", title:"Zone Type", metadata:[values:zoneTypes], defaultValue:"interior"
+                    input "delay_${devId}", "bool", title:"Entry/Exit Delays", defaultValue:false
+                }
+            }
         }
-        section("Bypass Zones") {
-            paragraph helpBypassZones
-            input inputBypassZones
+
+        if (settings.z_smoke) {
+            def devices = settings.z_smoke.sort {it.displayName}
+            devices.each() {
+                def devId = it.id
+                section("${it.displayName} (smoke)") {
+                    input "type_${devId}", "enum", title:"Zone Type", metadata:[values:zoneTypes], defaultValue:"alert"
+                    input "delay_${devId}", "bool", title:"Entry/Exit Delays", defaultValue:false
+                }
+            }
+        }
+
+        if (settings.z_water) {
+            def devices = settings.z_water.sort {it.displayName}
+            devices.each() {
+                def devId = it.id
+                section("${it.displayName} (moisture)") {
+                    input "type_${devId}", "enum", title:"Zone Type", metadata:[values:zoneTypes], defaultValue:"alert"
+                    input "delay_${devId}", "bool", title:"Entry/Exit Delays", defaultValue:false
+                }
+            }
         }
     }
 }
 
-// Show "Smart Alarm Settings" page
-def pageAlarmSettings() {
-    TRACE("pageAlarmSettings()")
+// Show "Arming/Disarming Options" page
+def pageArmingOptions() {
+    LOG("pageArmingOptions()")
 
     def helpArming =
-        "Smart Alarm can be armed and disarmed by simply setting the home " +
-        "'Mode'. There are two arming options - Stay and Away. Interior " +
-        "zones are not armed in Stay mode, allowing you to freely move " +
-        "inside your home."
+        "Smart Alarm can be armed and disarmed by setting the home Mode. " +
+        "There are two arming modes - Stay and Away. Interior zones are " +
+        "not armed in Stay mode, allowing you to move freely inside your " +
+        "home."
 
-    def helpExitDelay =
-        "Exit delay allows you to arm the alarm and exit the premises " +
-        "through one of the Entrance zones without setting off an alarm. " +
-        "Exit delay is not used when arming in Stay mode."
-
-    def helpEntryDelay =
-        "Entry delay allows you to enter the premises when Smart Alarm is " +
-        "armed and disarm it within specified time without setting off an " +
-        "alarm. Entry delay can be optionally disabled in Stay mode."
-
-    def helpAlarm =
-        "When an alarm is set off, Smart Alarm can turn on sirens and light" +
-        "switches, take camera snapshots and execute a 'Hello, Home' action."
-
-    def helpSilent =
-        "Enable Silent mode if you wish to temporarily disable sirens and " +
-        "switches. You will still receive push notifications and/or text " +
-        "messages, if configured."
+    def helpDelay =
+        "Exit and entry delay allows you to exit the premises after arming " +
+        "your alarm system and enter the premises while the alarm system " +
+        "is armed without setting off an alarm. You can optionally disable " +
+        "entry and exit delay when the alarm is armed in Stay mode."
 
     def inputAwayModes = [
-        name:           "awayModes",
-        type:           "mode",
-        title:          "Arm Away in these Modes",
-        multiple:       true,
-        required:       false
+        name:       "awayModes",
+        type:       "mode",
+        title:      "Arm 'Away' in these Modes",
+        multiple:   true,
+        required:   false
     ]
 
     def inputStayModes = [
-        name:           "stayModes",
-        type:           "mode",
-        title:          "Arm Stay in these Modes",
-        multiple:       true,
-        required:       false
+        name:       "stayModes",
+        type:       "mode",
+        title:      "Arm 'Stay' in these Modes",
+        multiple:   true,
+        required:   false
     ]
 
     def inputDisarmModes = [
-        name:           "disarmModes",
-        type:           "mode",
-        title:          "Disarm in these Modes",
-        multiple:       true,
-        required:       false
+        name:       "disarmModes",
+        type:       "mode",
+        title:      "Disarm in these Modes",
+        multiple:   true,
+        required:   false
     ]
 
-    def inputExitDelay = [
-        name:           "exitDelay",
-        type:           "enum",
-        metadata:       [values:["0","15","30","45","60"]],
-        title:          "Exit delay (in seconds)",
-        defaultValue:   "30",
-        required:       true
+    def inputDelay = [
+        name:       "delay",
+        type:       "enum",
+        metadata:   [values:["30","45","60","90"]],
+        title:      "Delay (in seconds)",
+        defaultValue: "30",
+        required:   true
     ]
 
-    def inputEntryDelay = [
-        name:           "entryDelay",
-        type:           "enum",
-        metadata:       [values:["0","15","30","45","60"]],
-        title:          "Entry delay (in seconds)",
-        defaultValue:   "30",
-        required:       true
+    def inputDelayStay = [
+        name:       "stayDelayOff",
+        type:       "bool",
+        title:      "Disable delays in Stay mode",
+        defaultValue: false,
+        required:   true
     ]
 
-    def inputEntryDelayDisable = [
-        name:           "entryDelayDisable",
-        type:           "bool",
-        title:          "Disable in Stay mode",
-        defaultValue:   false
+    def pageProperties = [
+        name:       "pageArmingOptions",
+        //title:      "Arming/Disarming Options",
+        nextPage:   "pageSetup",
+        uninstall:  false
     ]
 
-    def hhActions = getHelloHomeActions()
-    def inputHelloHome = [
-        name:           "helloHomeAction",
-        type:           "enum",
-        title:          "Execute this Hello Home action",
-        metadata:       [values: hhActions],
-        required:       false
-    ]
+    return dynamicPage(pageProperties) {
+        section("Arming/Disarming Options") {
+            paragraph helpArming
+        }
+
+        section("Modes") {
+            input inputAwayModes
+            input inputStayModes
+            input inputDisarmModes
+        }
+
+        section("Exit and Entry Delay") {
+            paragraph helpDelay
+            input inputDelay
+            input inputDelayStay
+        }
+    }
+}
+
+// Show "Alarm Options" page
+def pageAlarmOptions() {
+    LOG("pageAlarmOptions()")
+
+    def helpAlarm =
+        "You can configure Smart Alarm to take several actions when an " +
+        "alarm is set off, such as turning on sirens and light switches, " +
+        "taking camera snapshots and executing a 'Hello, Home' action."
 
     def inputAlarms = [
         name:           "alarms",
         type:           "capability.alarm",
-        title:          "Activate these alarms",
+        title:          "Which sirens?",
         multiple:       true,
         required:       false
+    ]
+
+    def inputSirenMode = [
+        name:           "sirenMode",
+        type:           "enum",
+        metadata:       [values:["Off","Siren","Strobe","Both"]],
+        title:          "Choose siren mode",
+        defaultValue:   "Both"
     ]
 
     def inputSwitches = [
         name:           "switches",
         type:           "capability.switch",
-        title:          "Turn on these switches",
+        title:          "Which switches?",
         multiple:       true,
         required:       false
     ]
@@ -470,62 +574,57 @@ def pageAlarmSettings() {
     def inputCameras = [
         name:           "cameras",
         type:           "capability.imageCapture",
-        title:          "Take camera snapshots",
+        title:          "Which cameras?",
         multiple:       true,
         required:       false
     ]
 
-    def inputSilent = [
-        name:           "silent",
-        type:           "bool",
-        title:          "Enable silent mode",
-        defaultValue:   false
+    def hhActions = getHelloHomeActions()
+    def inputHelloHome = [
+        name:           "helloHomeAction",
+        type:           "enum",
+        title:          "Which 'Hello, Home' action?",
+        metadata:       [values: hhActions],
+        required:       false
     ]
 
     def pageProperties = [
-        name:       "pageAlarmSettings",
-        title:      "Smart Alarm Settings",
+        name:       "pageAlarmOptions",
+        //title:      "Alarm Options",
         nextPage:   "pageSetup",
-        uninstall:  state.installed
+        uninstall:  false
     ]
 
     return dynamicPage(pageProperties) {
-        section {
-            paragraph helpArming
-            input inputAwayModes
-            input inputStayModes
-            input inputDisarmModes
-        }
-        section("Exit Delay") {
-            paragraph helpExitDelay
-            input inputExitDelay
-        }
-        section("Entry Delay") {
-            paragraph helpEntryDelay
-            input inputEntryDelay
-            input inputEntryDelayDisable
-        }
         section("Alarm Options") {
             paragraph helpAlarm
+        }
+        section("Sirens") {
             input inputAlarms
+            input inputSirenMode
+        }
+        section("Switches") {
             input inputSwitches
+        }
+        section("Cameras") {
             input inputCameras
+        }
+        section("'Hello, Home' Actions") {
             input inputHelloHome
-            paragraph helpSilent
-            input inputSilent
         }
     }
 }
 
 // Show "Notification Options" page
 def pageNotifications() {
-    TRACE("pageNotifications()")
+    LOG("pageNotifications()")
 
     def helpAbout =
-        "Smart Alarm has multiple ways of notifying you when its armed, " +
-        "disarmed or when an alarm is set off, including Push " +
-        "notifications, SMS (text) messages and Pushbullet notification " +
-        "service."
+        "You can configure Smart Alarm to notify you when it is armed, " +
+        "disarmed or when an alarm is set off. Notifications can be send " +
+        "using either Push messages, SMS (text) messages and Pushbullet " +
+        "messaging service. Smart Alarm can also notify you with sounds or " +
+        "voice alerts using compatible audio devices, such as Sonos."
 
     def inputPushAlarm = [
         name:           "pushMessage",
@@ -628,7 +727,7 @@ def pageNotifications() {
     def inputPushbulletDevice = [
         name:           "pushbullet",
         type:           "device.pushbullet",
-        title:          "Use these Pushbullet devices",
+        title:          "Which Pushbullet devices?",
         multiple:       true,
         required:       false
     ]
@@ -647,61 +746,10 @@ def pageNotifications() {
         defaultValue:   true
     ]
 
-    def pageProperties = [
-        name:       "pageNotifications",
-        title:      "Notification Options",
-        nextPage:   "pageSetup",
-        uninstall:  state.installed
-    ]
-
-    return dynamicPage(pageProperties) {
-        section {
-            paragraph helpAbout
-        }
-        section("Push Notifications") {
-            input inputPushAlarm
-            input inputPushStatus
-        }
-        section("Text Message (SMS) #1") {
-            input inputPhone1
-            input inputPhone1Alarm
-            input inputPhone1Status
-        }
-        section("Text Message (SMS) #2") {
-            input inputPhone2
-            input inputPhone2Alarm
-            input inputPhone2Status
-        }
-        section("Text Message (SMS) #3") {
-            input inputPhone3
-            input inputPhone3Alarm
-            input inputPhone3Status
-        }
-        section("Text Message (SMS) #4") {
-            input inputPhone4
-            input inputPhone4Alarm
-            input inputPhone4Status
-        }
-        section("Pushbullet Notifications") {
-            input inputPushbulletDevice
-            input inputPushbulletAlarm
-            input inputPushbulletStatus
-        }
-    }
-}
-
-// Show "Voice Notification Options" page
-def pageVoiceOptions() {
-    TRACE("pageVoiceOptions()")
-
-    def helpAbout =
-        "Smart Alarm can utilize available speech synthesis devices (e.g. " +
-        "VLC Thing) to provide voice notifications."
-
-    def inputSpeechDevice = [
-        name:           "speechSynth",
-        type:           "capability.speechSynthesis",
-        title:          "Use these text-to-speech devices",
+    def inputAudioPlayers = [
+        name:           "audioPlayer",
+        type:           "capability.musicPlayer",
+        title:          "Which audio players?",
         multiple:       true,
         required:       false
     ]
@@ -750,15 +798,46 @@ def pageVoiceOptions() {
 
     def pageProperties = [
         name:       "pageNotifications",
-        title:      "Notification Options",
+        //title:      "Notification Options",
         nextPage:   "pageSetup",
-        uninstall:  state.installed
+        uninstall:  false
     ]
 
     return dynamicPage(pageProperties) {
-        section {
+        section("Notification Options") {
             paragraph helpAbout
-            input inputSpeechDevice
+        }
+        section("Push Notifications") {
+            input inputPushAlarm
+            input inputPushStatus
+        }
+        section("Text Message (SMS) #1") {
+            input inputPhone1
+            input inputPhone1Alarm
+            input inputPhone1Status
+        }
+        section("Text Message (SMS) #2") {
+            input inputPhone2
+            input inputPhone2Alarm
+            input inputPhone2Status
+        }
+        section("Text Message (SMS) #3") {
+            input inputPhone3
+            input inputPhone3Alarm
+            input inputPhone3Status
+        }
+        section("Text Message (SMS) #4") {
+            input inputPhone4
+            input inputPhone4Alarm
+            input inputPhone4Status
+        }
+        section("Pushbullet Notifications") {
+            input inputPushbulletDevice
+            input inputPushbulletAlarm
+            input inputPushbulletStatus
+        }
+        section("Audio Notifications") {
+            input inputAudioPlayers
             input inputSpeechOnAlarm
             input inputSpeechOnStatus
             input inputSpeechTextAlarm
@@ -770,87 +849,124 @@ def pageVoiceOptions() {
 }
 
 // Show "Remote Control Options" page
-def pageRemoteControl() {
-    TRACE("pageRemoteControl()")
+def pageRemoteOptions() {
+    LOG("pageRemoteOptions()")
 
-    def textHelp =
-        "You can use remote controls such as Aeon Labs Minimote to arm " +
-        "and disarm Smart Alarm."
+    def helpRemote =
+        "You can arm and disarm Smart Alarm using any compatible remote " +
+        "control, for example Aeon Labs Minimote."
 
-    def inputButtons = [
-        name:       "buttons",
+    def inputRemotes = [
+        name:       "remotes",
         type:       "capability.button",
         title:      "Which remote controls?",
         multiple:   true,
         required:   false
     ]
 
-    def inputArmAway = [
-        name:           "buttonArmAway",
-        type:           "enum",
-        title:          "Which button to Arm Away?",
-        metadata:       [values:["1","2","3","4"]],
-        defaultValue:   "1",
-        required:       false
+    def inputArmAwayButton = [
+        name:       "buttonArmAway",
+        type:       "number",
+        title:      "Which button?",
+        required:   false
     ]
 
-    def inputArmStay = [
-        name:           "buttonArmStay",
-        type:           "enum",
-        title:          "Which button to Arm Stay?",
-        metadata:       [values:["1","2","3","4"]],
-        defaultValue:   "2",
-        required:       false
+    def inputArmAwayHold = [
+        name:       "holdArmAway",
+        type:       "bool",
+        title:      "Hold to activate",
+        defaultValue: false,
+        required:   true
     ]
 
-    def inputDisarm = [
-        name:           "buttonDisarm",
-        type:           "enum",
-        title:          "Which button to Disarm?",
-        metadata:       [values:["1","2","3","4"]],
-        defaultValue:   "3",
-        required:       false
+    def inputArmStayButton = [
+        name:       "buttonArmStay",
+        type:       "number",
+        title:      "Which button?",
+        required:    false
     ]
 
-    def inputPanic = [
-        name:           "buttonPanic",
-        type:           "enum",
-        title:          "Which button to Panic?",
-        metadata:       [values:["1","2","3","4"]],
-        defaultValue:   "4",
-        required:       false
+    def inputArmStayHold = [
+        name:       "holdArmStay",
+        type:       "bool",
+        title:      "Hold to activate",
+        defaultValue: false,
+        required:   true
+    ]
+
+    def inputDisarmButton = [
+        name:       "buttonDisarm",
+        type:       "number",
+        title:      "Which button?",
+        required:   false
+    ]
+
+    def inputDisarmHold = [
+        name:       "holdDisarm",
+        type:       "bool",
+        title:      "Hold to activate",
+        defaultValue: false,
+        required:   true
+    ]
+
+    def inputPanicButton = [
+        name:       "buttonPanic",
+        type:       "number",
+        title:      "Which button?",
+        required:   false
+    ]
+
+    def inputPanicHold = [
+        name:       "holdPanic",
+        type:       "bool",
+        title:      "Hold to activate",
+        defaultValue: false,
+        required:   true
     ]
 
     def pageProperties = [
-        name:       "pageRemoteControl",
-        title:      "Remote Control Settings",
+        name:       "pageRemoteOptions",
+        //title:      "Remote Control Options",
         nextPage:   "pageSetup",
-        install:    false,
         uninstall:  false
     ]
 
     return dynamicPage(pageProperties) {
-        section {
-            paragraph textHelp
-            input inputButtons
-            input inputArmAway
-            input inputArmStay
-            input inputDisarm
-            input inputPanic
+        section("Remote Control Options") {
+            paragraph helpRemote
+            input inputRemotes
+        }
+
+        section("Arm Away Button") {
+            input inputArmAwayButton
+            input inputArmAwayHold
+        }
+
+        section("Arm Stay Button") {
+            input inputArmStayButton
+            input inputArmStayHold
+        }
+
+        section("Disarm Button") {
+            input inputDisarmButton
+            input inputDisarmHold
+        }
+
+        section("Panic Button") {
+            input inputPanicButton
+            input inputPanicHold
         }
     }
 }
 
-// Show "Control Panel Options" page
+// Show "REST API Options" page
 def pageRestApiOptions() {
-    TRACE("pageRestApiOptions()")
+    LOG("pageRestApiOptions()")
 
     def textHelp =
         "Smart Alarm can be controlled remotely by any Web client using " +
         "REST API. Please refer to Smart Alarm documentation for more " +
-        "information.\n\n" +
-        "WARNING: Make sure OAuth is enabled in the smart app settings " +
-        "(in SmartThings IDE) before enabling REST API."
+        "information."
 
     def textPincode =
         "You can specify optional PIN code to protect arming and disarming " +
@@ -881,16 +997,18 @@ def pageRestApiOptions() {
 
     def pageProperties = [
         name:       "pageRestApiOptions",
-        title:      "REST API Options",
+        //title:      "REST API Options",
         nextPage:   "pageSetup",
-        install:    false,
         uninstall:  false
     ]
 
     return dynamicPage(pageProperties) {
-        section {
+        section("REST API Options") {
             paragraph textHelp
             input inputRestApi
+        }
+
+        section("PIN Code") {
             paragraph textPincode
             input inputPincode
             input inputArmWithPin
@@ -898,47 +1016,56 @@ def pageRestApiOptions() {
 
         if (isRestApiEnabled()) {
             section("REST API Info") {
-                paragraph "Base URL:\n" + state.restEndpoint
-                paragraph "Access Token:\n" + state.accessToken
+                paragraph "App ID:\n${app.id}"
+                paragraph "Access Token:\n${state.accessToken}"
             }
         }
     }
 }
 
 def installed() {
-    TRACE("installed()")
+    LOG("installed()")
 
     initialize()
     state.installed = true
 }
 
 def updated() {
-    TRACE("updated()")
+    LOG("updated()")
 
-    unsubscribe()
     unschedule()
+    unsubscribe()
     initialize()
 }
 
 private def setupInit() {
-    TRACE("setupInit()")
+    LOG("setupInit()")
 
-    state.version = buildNumber()
     if (state.installed == null) {
         state.installed = false
         state.armed = false
-        state.alarm = false
         state.zones = []
+        state.alarms = []
+        state.history = []
+    } else {
+        def version = state.version as String
+        if (version == null || version.startsWith('1')) {
+            return false
+        }
     }
+
+    state.version = getVersion()
+    return true
 }
 
 private def initialize() {
-    log.trace "${app.name}. ${textVersion()}. ${textCopyright()}"
+    log.info "Smart Alarm. Version ${getVersion()}. ${textCopyright()}"
+    LOG("settings: ${settings}")
 
-    state._init_ = true
-    state.exitDelay = settings.exitDelay?.toInteger() ?: 0
-    state.entryDelay = settings.entryDelay?.toInteger() ?: 0
+    clearAlarm()
+    state.delay = settings.delay?.toInteger() ?: 30
     state.offSwitches = []
+    state.history = []
 
     if (settings.awayModes?.contains(location.mode)) {
         state.armed = true
@@ -954,18 +1081,160 @@ private def initialize() {
     initZones()
     initButtons()
     initRestApi()
-    resetPanel()
     subscribe(location, onLocation)
 
     STATE()
-    state._init_ = false
+}
+
+private def clearAlarm() {
+    LOG("clearAlarm()")
+
+    state.alarms = []
+    settings.alarms*.off()
+
+    // Turn off only those switches that we've turned on
+    def switchesOff = state.offSwitches
+    if (switchesOff) {
+        LOG("switchesOff: ${switchesOff}")
+        settings.switches.each() {
+            if (switchesOff.contains(it.id)) {
+                it.off()
+            }
+        }
+        state.offSwitches = []
+    }
+}
+
+private def initZones() {
+    LOG("initZones()")
+
+    state.zones = []
+
+    state.zones << [
+        deviceId:   null,
+        sensorType: "panic",
+        zoneType:   "alert",
+        delay:      false
+    ]
+
+    if (settings.z_contact) {
+        settings.z_contact.each() {
+            state.zones << [
+                deviceId:   it.id,
+                sensorType: "contact",
+                zoneType:   settings["type_${it.id}"] ?: "exterior",
+                delay:      settings["delay_${it.id}"]
+            ]
+        }
+        subscribe(settings.z_contact, "contact.open", onContact)
+    }
+
+    if (settings.z_motion) {
+        settings.z_motion.each() {
+            state.zones << [
+                deviceId:   it.id,
+                sensorType: "motion",
+                zoneType:   settings["type_${it.id}"] ?: "interior",
+                delay:      settings["delay_${it.id}"]
+            ]
+        }
+        subscribe(settings.z_motion, "motion.active", onMotion)
+    }
+
+    if (settings.z_movement) {
+        settings.z_movement.each() {
+            state.zones << [
+                deviceId:   it.id,
+                sensorType: "acceleration",
+                zoneType:   settings["type_${it.id}"] ?: "interior",
+                delay:      settings["delay_${it.id}"]
+            ]
+        }
+        subscribe(settings.z_movement, "acceleration.active", onMovement)
+    }
+
+    if (settings.z_smoke) {
+        settings.z_smoke.each() {
+            state.zones << [
+                deviceId:   it.id,
+                sensorType: "smoke",
+                zoneType:   settings["type_${it.id}"] ?: "alert",
+                delay:      settings["delay_${it.id}"]
+            ]
+        }
+        subscribe(settings.z_smoke, "smoke.detected", onSmoke)
+        subscribe(settings.z_smoke, "smoke.tested", onSmoke)
+        subscribe(settings.z_smoke, "carbonMonoxide.detected", onSmoke)
+        subscribe(settings.z_smoke, "carbonMonoxide.tested", onSmoke)
+    }
+
+    if (settings.z_water) {
+        settings.z_water.each() {
+            state.zones << [
+                deviceId:   it.id,
+                sensorType: "water",
+                zoneType:   settings["type_${it.id}"] ?: "alert",
+                delay:      settings["delay_${it.id}"]
+            ]
+        }
+        subscribe(settings.z_water, "water.wet", onWater)
+    }
+
+    state.zones.each() {
+        def zoneType = it.zoneType
+
+        if (zoneType == "alert") {
+            it.armed = true
+        } else if (zoneType == "exterior") {
+            it.armed = state.armed
+        } else if (zoneType == "interior") {
+            it.armed = state.armed && !state.stay
+        } else {
+            it.armed = false
+        }
+    }
+}
+
+private def initButtons() {
+    LOG("initButtons()")
+
+    state.buttonActions = []
+    if (settings.remotes) {
+        if (settings.buttonArmAway) {
+            def button = settings.buttonArmAway.toInteger()
+            def event = settings.holdArmAway ? "held" : "pushed"
+            state.buttonActions << [button:button, event:event, action:"armAway"]
+        }
+
+        if (settings.buttonArmStay) {
+            def button = settings.buttonArmStay.toInteger()
+            def event = settings.holdArmStay ? "held" : "pushed"
+            state.buttonActions << [button:button, event:event, action:"armStay"]
+        }
+
+        if (settings.buttonDisarm) {
+            def button = settings.buttonDisarm.toInteger()
+            def event = settings.holdDisarm ? "held" : "pushed"
+            state.buttonActions << [button:button, event:event, action:"disarm"]
+        }
+
+        if (settings.buttonPanic) {
+            def button = settings.buttonPanic.toInteger()
+            def event = settings.holdPanic ? "held" : "pushed"
+            state.buttonActions << [button:button, event:event, action:"panic"]
+        }
+
+        if (state.buttonActions) {
+            subscribe(settings.remotes, "button", onButtonEvent)
+        }
+    }
 }
 
 private def initRestApi() {
     if (settings.restApiEnabled) {
         if (!state.accessToken) {
             def token = createAccessToken()
-            TRACE("Created new access token: ${token})")
+            LOG("Created new access token: ${token})")
         }
         state.url = "https://graph.api.smartthings.com/api/smartapps/installations/${app.id}/"
         log.info "REST API enabled"
@@ -979,173 +1248,14 @@ private def isRestApiEnabled() {
     return settings.restApiEnabled && state.accessToken
 }
 
-private def initZones() {
-    TRACE("initZones()")
-
-    state.zones = []
-
-    if (settings.z_contact) {
-        settings.z_contact.each() {
-            String zoneName = "contact: ${it.displayName}"
-            def zone = [
-                deviceId:   it.id,
-                sensorType: "contact",
-                alert:      settings.alertZones?.contains(zoneName) ?: false,
-                entrance:   settings.entranceZones?.contains(zoneName) ?: false,
-                interior:   settings.interiorZones?.contains(zoneName) ?: false,
-                bypass:     settings.bypassZones?.contains(zoneName) ?: false,
-                armed:      false,
-                alarm:      null
-            ]
-
-            state.zones << zone
-        }
-        subscribe(settings.z_contact, "contact.open", onContact)
-    }
-
-    if (settings.z_motion) {
-        settings.z_motion.each() {
-            String zoneName = "motion: ${it.displayName}"
-            def zone = [
-                deviceId:   it.id,
-                sensorType: "motion",
-                alert:      settings.alertZones?.contains(zoneName) ?: false,
-                entrance:   settings.entranceZones?.contains(zoneName) ?: false,
-                interior:   settings.interiorZones?.contains(zoneName) ?: false,
-                bypass:     settings.bypassZones?.contains(zoneName) ?: false,
-                armed:      false,
-                alarm:      null
-            ]
-
-            state.zones << zone
-        }
-        subscribe(settings.z_motion, "motion.active", onMotion)
-    }
-
-    if (settings.z_smoke) {
-        settings.z_smoke.each() {
-            String zoneName = "smoke: ${it.displayName}"
-            TRACE("zoneName: ${zoneName}")
-            def zone = [
-                deviceId:   it.id,
-                sensorType: "smoke",
-                alert:      settings.alertZones?.contains(zoneName) ?: false,
-                entrance:   settings.entranceZones?.contains(zoneName) ?: false,
-                interior:   settings.interiorZones?.contains(zoneName) ?: false,
-                bypass:     settings.bypassZones?.contains(zoneName) ?: false,
-                armed:      false,
-                alarm:      null
-            ]
-
-            state.zones << zone
-        }
-        subscribe(settings.z_smoke, "smoke.detected", onSmoke)
-        subscribe(settings.z_smoke, "smoke.tested", onSmoke)
-        subscribe(settings.z_smoke, "carbonMonoxide.detected", onSmoke)
-        subscribe(settings.z_smoke, "carbonMonoxide.tested", onSmoke)
-    }
-
-    if (settings.z_water) {
-        settings.z_water.each() {
-            String zoneName = "water: ${it.displayName}"
-            TRACE("zoneName: ${zoneName}")
-            def zone = [
-                deviceId:   it.id,
-                sensorType: "water",
-                alert:      settings.alertZones?.contains(zoneName) ?: false,
-                entrance:   settings.entranceZones?.contains(zoneName) ?: false,
-                interior:   settings.interiorZones?.contains(zoneName) ?: false,
-                bypass:     settings.bypassZones?.contains(zoneName) ?: false,
-                armed:      false,
-                alarm:      null
-            ]
-
-            state.zones << zone
-        }
-        subscribe(settings.z_water, "water.wet", onWater)
-    }
-}
-
-private def initButtons() {
-    TRACE("initButtons()")
-
-    state.buttonActions = [:]
-    if (settings.buttons) {
-        if (settings.buttonArmAway) {
-            state.buttonActions[settings.buttonArmAway] = "armAway"
-        }
-        if (settings.buttonArmStay) {
-            state.buttonActions[settings.buttonArmStay] = "armStay"
-        }
-        if (settings.buttonDisarm) {
-            state.buttonActions[settings.buttonDisarm] = "disarm"
-        }
-        if (settings.buttonPanic) {
-            state.buttonActions[settings.buttonPanic] = "panic"
-        }
-
-        subscribe(settings.buttons, "button.pushed", onButtonPushed)
-    }
-}
-
-def resetPanel() {
-    TRACE("resetPanel()")
-
-    unschedule()
-    settings.alarms*.off()
-
-    // only turn back off those switches that we turned on
-    def switchesOff = state.offSwitches
-    if (switchesOff) {
-        TRACE("switchesOff: ${switchesOff}")
-        settings.switches.each() {
-            if (switchesOff.contains(it.id)) {
-                it.off()
-            }
-        }
-        state.offSwitches = []
-    }
-
-    state.alarm = false
-
-    // Reset zones
-    state.zones.each() {
-        it.alarm = null
-
-        if (it.bypass) {
-            it.armed = false
-        } else if (it.alert) {
-            it.armed = true
-        } else if (it.interior) {
-            it.armed = state.armed && !state.stay
-        } else if (it.entrance) {
-            it.armed = state.armed && (state.stay || state.exitDelay == 0)
-        } else {
-            it.armed = state.armed
-        }
-    }
-
-    // Schedule delayed arming of Entrance zones
-    if (state.armed && !state.stay && state.exitDelay) {
-        myRunIn(state.exitDelay, armEntranceZones)
-    }
-
-    // Send notification
-    def msg = "${location.name} alarm is "
-    if (state.armed) {
-        def mode = state.stay ? "Stay" : "Away"
-        msg += "Armed ${mode}."
-    } else {
-        msg += "Disarmed."
-    }
-
-    log.trace msg
-    notify(msg)
-    notifyVoice()
-}
+def onContact(evt)  { onZoneEvent(evt, "contact") }
+def onMotion(evt)   { onZoneEvent(evt, "motion") }
+def onMovement(evt) { onZoneEvent(evt, "acceleration") }
+def onSmoke(evt)    { onZoneEvent(evt, "smoke") }
+def onWater(evt)    { onZoneEvent(evt, "water") }
 
 private def onZoneEvent(evt, sensorType) {
-    TRACE("onZoneEvent(${evt.displayName}, ${sensorType})")
+    LOG("onZoneEvent(${evt.displayName}, ${sensorType})")
 
     def zone = getZoneForDevice(evt.deviceId, sensorType)
     if (!zone) {
@@ -1153,33 +1263,18 @@ private def onZoneEvent(evt, sensorType) {
         return
     }
 
-    if (!zone.armed) {
-        return
-    }
-
-    zone.alarm = evt.displayName
-
-    if (state.alarm) {
-        // already in alarm state
-        return
-    }
-
-    // Activate alarm
-    state.alarm = true
-    if (zone.entrance && state.entryDelay && !(state.stay && settings.entryDelayDisable)) {
-        myRunIn(state.entryDelay, activateAlarm)
-    } else {
-        activateAlarm()
+    if (zone.armed) {
+        state.alarms << evt.displayName
+        if (zone.zoneType == "alert" || !zone.delay || (state.stay && settings.stayDelayOff)) {
+            activateAlarm()
+        } else {
+            myRunIn(state.delay, activateAlarm)
+        }
     }
 }
 
-def onContact(evt)  { onZoneEvent(evt, "contact") }
-def onMotion(evt)   { onZoneEvent(evt, "motion") }
-def onSmoke(evt)    { onZoneEvent(evt, "smoke") }
-def onWater(evt)    { onZoneEvent(evt, "water") }
-
 def onLocation(evt) {
-    TRACE("onLocation(${evt.value})")
+    LOG("onLocation(${evt.value})")
 
     String mode = evt.value
     if (settings.awayModes?.contains(mode)) {
@@ -1191,144 +1286,218 @@ def onLocation(evt) {
     }
 }
 
-def onButtonPushed(evt) {
-    TRACE("onButtonPushed(${evt.displayName})")
+def onButtonEvent(evt) {
+    LOG("onButtonEvent(${evt.displayName})")
 
-    if (!evt.data) {
+    if (!state.buttonActions || !evt.data) {
         return
     }
 
     def slurper = new JsonSlurper()
     def data = slurper.parseText(evt.data)
-    def button = data.buttonNumber
+    def button = data.buttonNumber?.toInteger()
     if (button) {
-        TRACE("Button '${button}' was pushed.")
-        def action = state.buttonActions["${button}"]
-        if (action) {
-            log.trace "Executing button action ${action}()"
-            "${action}"()
+        LOG("Button '${button}' was ${evt.value}.")
+        def item = state.buttonActions.find {
+            it.button == button && it.event == evt.value
+        }
+
+        if (item) {
+            LOG("Executing '${item.action}' button action")
+            "${item.action}"()
         }
     }
 }
 
 def armAway() {
-    TRACE("armAway()")
+    LOG("armAway()")
 
-    if (state.armed && !state.stay) {
-        return
+    if (!atomicState.armed || atomicState.stay) {
+        armPanel(false)
     }
-
-    state.armed = true
-    state.stay = false
-    resetPanel()
 }
 
 def armStay() {
-    TRACE("armStay()")
+    LOG("armStay()")
 
-    if (state.armed && state.stay) {
-        return
+    if (!atomicState.armed || !atomicState.stay) {
+        armPanel(true)
     }
-
-    state.armed = true
-    state.stay = true
-    resetPanel()
 }
 
 def disarm() {
-    TRACE("disarm()")
+    LOG("disarm()")
 
-    if (state.armed) {
+    if (atomicState.armed) {
         state.armed = false
-        resetPanel()
-    }
-}
-
-def armEntranceZones() {
-    TRACE("armEntranceZones()")
-
-    if (state.armed) {
         state.zones.each() {
-            if (it.entrance && !it.bypass) {
-                it.armed = true
+            if (it.zoneType != "alert") {
+                it.armed = false
             }
         }
-        def msg = "Entrance zones are armed"
-        log.trace msg
-        notify(msg)
+
+        reset()
     }
 }
 
 def panic() {
-    TRACE("panic()")
+    LOG("panic()")
 
-    state.alarm = true;
+    state.alarms << "Panic"
     activateAlarm()
+}
+
+def reset() {
+    LOG("reset()")
+
+    unschedule()
+    clearAlarm()
+
+    // Send notification
+    def msg = "${location.name} is "
+    if (state.armed) {
+        msg += "ARMED "
+        msg += state.stay ? "STAY" : "AWAY"
+    } else {
+        msg += "DISARMED."
+    }
+
+    notify(msg)
+    notifyVoice()
+}
+
+def exitDelayExpired() {
+    LOG("exitDelayExpired()")
+
+    def armed = atomicState.armed
+    def stay = atomicState.stay
+    if (!armed) {
+        log.warn "exitDelayExpired: unexpected state!"
+        STATE()
+        return
+    }
+
+    state.zones.each() {
+        def zoneType = it.zoneType
+        if (zoneType == "exterior" || (zoneType == "interior" && !stay)) {
+            it.armed = true
+        }
+    }
+
+    def msg = "${location.name}: all "
+    if (stay) {
+        msg += "exterior "
+    }
+    msg += "zones are armed."
+
+    notify(msg)
+}
+
+private def armPanel(stay) {
+    LOG("armPanel(${stay})")
+
+    unschedule()
+    clearAlarm()
+
+    state.armed = true
+    state.stay = stay
+
+    def armDelay = false
+    state.zones.each() {
+        def zoneType = it.zoneType
+        if (zoneType == "exterior") {
+            if (it.delay) {
+                it.armed = false
+                armDelay = true
+            } else {
+                it.armed = true
+            }
+        } else if (zoneType == "interior") {
+            if (stay) {
+                it.armed = false
+            } else if (it.delay) {
+                it.armed = false
+                armDelay = true
+            } else {
+                it.armed = true
+            }
+        }
+    }
+
+    def delay = armDelay && !(stay && settings.stayDelayOff) ? atomicState.delay : 0
+    if (delay) {
+        myRunIn(delay, exitDelayExpired)
+    }
+
+    def mode = stay ? "STAY" : "AWAY"
+    def msg = "${location.name} "
+    if (delay) {
+        msg += "will arm ${mode} in ${state.delay} seconds."
+    } else {
+        msg += "is ARMED ${mode}."
+    }
+
+    notify(msg)
+    notifyVoice()
 }
 
 // .../armaway REST API endpoint
 def apiArmAway() {
-    TRACE("apiArmAway()")
+    LOG("apiArmAway()")
 
     if (!isRestApiEnabled()) {
         log.error "REST API disabled"
         return httpError(403, "Access denied")
     }
 
-    if (settings.pincode && settings.armWithPin) {
-        if (params.pincode != settings.pincode.toString()) {
-            log.error "Invalid PIN code '${params.pincode}'"
-            return httpError(403, "Access denied")
-        }
+    if (settings.pincode && settings.armWithPin && (params.pincode != settings.pincode.toString())) {
+        log.error "Invalid PIN code '${params.pincode}'"
+        return httpError(403, "Access denied")
     }
 
     armAway()
-    return apiGetStatus()
+    return apiStatus()
 }
 
 // .../armstay REST API endpoint
 def apiArmStay() {
-    TRACE("apiArmStay()")
+    LOG("apiArmStay()")
 
     if (!isRestApiEnabled()) {
         log.error "REST API disabled"
         return httpError(403, "Access denied")
     }
 
-    if (settings.pincode && settings.armWithPin) {
-        if (params.pincode != settings.pincode.toString()) {
-            log.error "Invalid PIN code '${params.pincode}'"
-            return httpError(403, "Access denied")
-        }
+    if (settings.pincode && settings.armWithPin && (params.pincode != settings.pincode.toString())) {
+        log.error "Invalid PIN code '${params.pincode}'"
+        return httpError(403, "Access denied")
     }
 
     armStay()
-    return apiGetStatus()
+    return apiStatus()
 }
 
 // .../disarm REST API endpoint
 def apiDisarm() {
-    TRACE("apiDisarm()")
+    LOG("apiDisarm()")
 
     if (!isRestApiEnabled()) {
         log.error "REST API disabled"
         return httpError(403, "Access denied")
     }
 
-    if (settings.pincode) {
-        if (params.pincode != settings.pincode.toString()) {
-            log.error "Invalid PIN code '${params.pincode}'"
-            return httpError(403, "Access denied")
-        }
+    if (settings.pincode && (params.pincode != settings.pincode.toString())) {
+        log.error "Invalid PIN code '${params.pincode}'"
+        return httpError(403, "Access denied")
     }
 
     disarm()
-    return apiGetStatus()
+    return apiStatus()
 }
 
 // .../panic REST API endpoint
 def apiPanic() {
-    TRACE("apiPanic()")
+    LOG("apiPanic()")
 
     if (!isRestApiEnabled()) {
         log.error "REST API disabled"
@@ -1336,73 +1505,80 @@ def apiPanic() {
     }
 
     panic()
-    return apiGetStatus()
+    return apiStatus()
 }
 
 // .../status REST API endpoint
-def apiGetStatus() {
-    TRACE("apiGetStatus()")
+def apiStatus() {
+    LOG("apiStatus()")
 
     if (!isRestApiEnabled()) {
         log.error "REST API disabled"
         return httpError(403, "Access denied")
     }
 
-    def status = [:]
-    status.status = state.armed ? (state.stay ? "armed stay" : "armed away") : "disarmed"
-    status.alarm = state.alarm
+    def status = [
+        status: state.armed ? (state.stay ? "armed stay" : "armed away") : "disarmed",
+        alarms: state.alarms
+    ]
 
     return status
 }
 
 def activateAlarm() {
-    TRACE("activateAlarm()")
+    LOG("activateAlarm()")
 
-    if (!state.alarm) {
+    if (state.alarms.size() == 0) {
         log.warn "activateAlarm: false alarm"
         return
     }
 
-    // Activate alarms and switches
-    if (!settings.silent) {
-        settings.alarms*.both()
+    switch (settings.sirenMode) {
+    case "Siren":
+        settings.alarms*.siren()
+        break
 
-        // Only turn on those switches that are currently off
-        def switchesOn = settings.switches?.findAll { it?.currentSwitch == "off" }
-        TRACE("switchesOn: ${switchesOn}")
-        if (switchesOn) {
-            switchesOn*.on()
-            state.offSwitches = switchesOn.collect { it.id }
-        }
+    case "Strobe":
+        settings.alarms*.strobe()
+        break
+        
+    case "Both":
+        settings.alarms*.both()
+        break
     }
 
-    // Take camera snapshots
+    // Only turn on those switches that are currently off
+    def switchesOn = settings.switches?.findAll { it?.currentSwitch == "off" }
+    LOG("switchesOn: ${switchesOn}")
+    if (switchesOn) {
+        switchesOn*.on()
+        state.offSwitches = switchesOn.collect { it.id }
+    }
+
     settings.cameras*.take()
 
-    // Execute Hello Home action
     if (settings.helloHomeAction) {
-        log.trace "Executing HelloHome action \'${settings.helloHomeAction}\'"
+        log.info "Executing HelloHome action '${settings.helloHomeAction}'"
         location.helloHome.execute(settings.helloHomeAction)
     }
 
-    // Send notifications
     def msg = "Alarm at ${location.name}!"
-    state.zones.each() {
-        if (it.alarm) {
-            msg += "\n${it.alarm}"
-        }
+    state.alarms.each() {
+        msg += "\n${it}"
     }
-    log.trace msg
+
     notify(msg)
     notifyVoice()
 
-    // Schedule panel reset in 3 minutes
-    myRunIn(180, resetPanel)
+    myRunIn(180, reset)
 }
 
 private def notify(msg) {
-    TRACE("notify(${msg})")
-    if (state.alarm) {
+    LOG("notify(${msg})")
+
+    log.info msg
+
+    if (state.alarms.size()) {
         // Alarm notification
         if (settings.pushMessage) {
             mySendPush(msg)
@@ -1427,8 +1603,8 @@ private def notify(msg) {
         }
 
         if (settings.pushbulletAlarm && settings.pushbullet) {
-        	settings.pushbullet*.push(msg)
-        }    
+            settings.pushbullet*.push(location.name, msg)
+        }   
     } else {
         // Status change notification
         if (settings.pushStatusMessage) {
@@ -1454,20 +1630,20 @@ private def notify(msg) {
         }
 
         if (settings.pushbulletStatus && settings.pushbullet) {
-        	settings.pushbullet*.push(msg)
+            settings.pushbullet*.push(location.name, msg)
         }
     }
 }
 
 private def notifyVoice() {
-    TRACE("notifyVoice()")
+    LOG("notifyVoice()")
 
-    if (!settings.speechSynth || state._init_) {
+    if (!settings.audioPlayer) {
         return
     }
 
     def phrase = null
-    if (state.alarm) {
+    if (state.alarms.size()) {
         // Alarm notification
         if (settings.speechOnAlarm) {
             phrase = settings.speechText ?: getStatusPhrase()
@@ -1488,23 +1664,35 @@ private def notifyVoice() {
     }
 
     if (phrase) {
-        settings.speechSynth*.speak(phrase)
+        settings.audioPlayer*.playText(phrase)
     }
 }
 
+private def history(String event, String description = "") {
+    LOG("history(${event}, ${description})")
+
+    def history = atomicState.history
+    history << [time: now(), event: event, description: description]
+    if (history.size() > 10) {
+        history = history.sort{it.time}
+        history = history[1..-1]
+    }
+
+    LOG("history: ${history}")
+    state.history = history
+}
+
 private def getStatusPhrase() {
-    TRACE("getStatusPhrase()")
+    LOG("getStatusPhrase()")
 
     def phrase = ""
-    if (state.alarm) {
+    if (state.alarms.size()) {
         phrase = "Alarm at ${location.name}!"
-        state.zones.each() {
-            if (it.alarm) {
-                phrase += " In zone ${it.alarm}."
-            }
+        state.alarms.each() {
+            phrase += " ${it}."
         }
     } else {
-        phrase = "${location.name} alarm is "
+        phrase = "${location.name} security is "
         if (state.armed) {
             def mode = state.stay ? "stay" : "away"
             phrase += "armed in ${mode} mode."
@@ -1521,75 +1709,120 @@ private def getHelloHomeActions() {
     return actions.sort()
 }
 
-private def getZoneNames() {
-    def zoneNames = []
-    for (dev in settings.z_contact) {
-        zoneNames << "contact: ${dev.displayName}"
-    }
-    for (dev in settings.z_motion) {
-        zoneNames << "motion: ${dev.displayName}"
-    }
-    for (dev in settings.z_smoke) {
-        zoneNames << "smoke: ${dev.displayName}"
-    }
-    for (dev in settings.z_water) {
-        zoneNames << "water: ${dev.displayName}"
+private def getAlarmStatus() {
+    def alarmStatus
+
+    if (atomicState.armed) {
+        alarmStatus = "ARMED "
+        alarmStatus += atomicState.stay ? "STAY" : "AWAY"
+    } else {
+        alarmStatus = "DISARMED"
     }
 
-    return zoneNames.sort()
+    return alarmStatus
+}
+
+private def getZoneStatus(device, sensorType) {
+
+    def zone = getZoneForDevice(device.id, sensorType)
+    if (!zone) {
+        return null
+    }
+
+    def str = "${device.displayName}: ${zone.zoneType}, "
+    str += zone.armed ? "armed, " : "disarmed, "
+    str += device.currentValue(sensorType)
+
+    return str
 }
 
 private def getZoneForDevice(id, sensorType) {
     return state.zones.find() { it.deviceId == id && it.sensorType == sensorType }
 }
 
-private def getDeviceById(id) {
-    def device = settings.z_contact?.find() { it.id == id }
+private def isZoneReady(device, sensorType) {
+    def ready
 
-    if (!device) {
-        device = settings.z_motion?.find() { it.id == id }
+    switch (sensorType) {
+    case "contact":
+        ready = "closed".equals(device.currentValue("contact"))
+        break
+
+    case "motion":
+        ready = "inactive".equals(device.currentValue("motion"))
+        break
+
+    case "acceleration":
+        ready = "inactive".equals(device.currentValue("acceleration"))
+        break
+
+    case "smoke":
+        ready = "clear".equals(device.currentValue("smoke"))
+        break
+
+    case "water":
+        ready = "dry".equals(device.currentValue("water"))
+        break
+
+    default:
+        ready = false
     }
 
-    if (!device) {
-        device = settings.z_smoke?.find() { it.id == id }
+    return ready
+}
+
+private def getDeviceById(id, sensorType) {
+    switch (sensorType) {
+    case "contact":
+        return settings.z_contact?.find() { it.id == id }
+
+    case "motion":
+        return settings.z_motion?.find() { it.id == id }
+
+    case "acceleration":
+        return settings.z_movement?.find() { it.id == id }
+
+    case "smoke":
+        return settings.z_smoke?.find() { it.id == id }
+
+    case "water":
+        return settings.z_water?.find() { it.id == id }
     }
 
-    if (!device) {
-        device = settings.z_water?.find() { it.id == id }
-    }
+    return null
+}
 
-    return device
+private def getNumZones() {
+    def numZones = 0
+
+    numZones += settings.z_contact?.size() ?: 0
+    numZones += settings.z_motion?.size() ?: 0
+    numZones += settings.z_movement?.size() ?: 0
+    numZones += settings.z_smoke?.size() ?: 0
+    numZones += settings.z_water?.size() ?: 0
+
+    return numZones
 }
 
 private def myRunIn(delay_s, func) {
-    TRACE("myRunIn(${delay_s})")
-
     if (delay_s > 0) {
-        def tms = now() + (delay_s * 1000)
-        def date = new Date(tms)
+        def date = new Date(now() + (delay_s * 1000))
         runOnce(date, func)
-        TRACE("'${func}' scheduled to run at ${date}")
+        LOG("scheduled '${func}' to run at ${date}")
     }
 }
 
 private def mySendPush(msg) {
-    // cannot call sendPush() from installed() or updated()
-    if (!state._init_) {
-        // sendPush can throw an exception
-        try {
-            sendPush(msg)
-        } catch (e) {
-            log.error e
-        }
+    // sendPush can throw an exception
+    try {
+        sendPush(msg)
+    } catch (e) {
+        log.error e
     }
 }
 
-private def buildNumber() {
-    return 150127
-}
-
-private def textVersion() {
-    def text = "Version 2.2.6 (01/27/2015)"
+private def getVersion() {
+    return "2.4.3"
 }
 
 private def textCopyright() {
@@ -1610,11 +1843,10 @@ private def textLicense() {
         "along with this program. If not, see <http://www.gnu.org/licenses/>."
 }
 
-private def TRACE(message) {
-    //log.debug message
+private def LOG(message) {
+    //log.trace message
 }
 
 private def STATE() {
-    //log.trace "settings: ${settings}"
     //log.trace "state: ${state}"
 }
